@@ -42,6 +42,15 @@ binaries, commercial cover art, BIOS files, and video themes are not bundled.
 - **Keep music close.** Playback controls after granting Android notification access.
 - **Optional root controls.** Supported-device performance profiles, shutdown, idle cleanup,
   and PPSSPP exit integration. Disabled by default on new installations.
+- **60 FPS patches (root).** PSP games that run their logic at 30 fps get the community 60 FPS
+  patch applied on launch: Nomad reads each ISO's `DISC_ID`, writes `PSP/Cheats/<DISC_ID>.ini` from
+  `app/assets/fps-patches.txt`, sets `EnableCheats` (and `[CPU] CPUSpeed` for patches that need it,
+  e.g. Gran Turismo) in `ppsspp.ini`, and stops a lingering PPSSPP so it boots fresh. On by default
+  for supported discs; the game's ⋯ menu has a "60 FPS patch" row to turn it off per game, which
+  also removes the cheat file. Verified on Crisis Core: 31 fps off, 61 fps on (PPSSPP's own counter,
+  `iShowStatusFlags = 1`). Patches ship for Crisis Core, GTA: Vice City Stories, God of War: Chains
+  of Olympus, Assassin's Creed: Bloodlines, Gran Turismo and Project DIVA (US/JP discs); add a block
+  to the table for others.
 
 ## Install
 

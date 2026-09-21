@@ -655,6 +655,9 @@ function openGameMenu(game, x, y) {
   $('menuTitle').textContent = game.title;
   $('menuFavorite').textContent = game.favorite ? 'Remove from favorites' : 'Add to favorites';
   $('menuArtReset').hidden = !game.cover;
+  // Only discs with a known 60 FPS patch get the row; the launcher applies it through PPSSPP's cheat file.
+  $('menuFps').hidden = !game.fpsPatch || game.fpsPatch === 'none';
+  $('menuFps').textContent = game.fpsPatch === 'on' ? '60 FPS patch: on' : '60 FPS patch: off';
   $('menuDelete').textContent = game.android ? 'Uninstall…' : 'Delete game…';
   $('menuDelete').classList.remove('confirm');
   menu.hidden = false;
@@ -667,6 +670,7 @@ $('menuPlay').onclick = () => { const g = menuGame; closeGameMenu(); if (g) play
 $('menuFavorite').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('favorite', g.id); };
 $('menuArt').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('pickCover', g.id); };
 $('menuArtReset').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('clearCover', g.id); };
+$('menuFps').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('fpsPatch', g.id, g.fpsPatch !== 'on'); };
 // Deleting a file is irreversible, so the first tap only arms the button.
 $('menuDelete').onclick = e => {
   e.stopPropagation();

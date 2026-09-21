@@ -1,0 +1,52 @@
+# 60 FPS patches Nomad writes into PPSSPP's cheat folder before a launch (CWCheat "_L" lines).
+# Source: the PPSSPP community 60 FPS patch database (Kabuto_Kun et al., via CWCheat-Database-Plus).
+# One block per DISC_ID; optional "clock=<MHz>" sets PPSSPP's emulated PSP CPU clock for that launch.
+# Only the "60 FPS" variant of each game's patch is kept: a launch without the patch restores the
+# game's own code, so no "[Off]" companion is needed.
+
+[ULUS10336] Crisis Core: Final Fantasy VII (US)
+_L 0x20006564 0x26310001
+_L 0x2009E1F8 0x3C053F00
+_L 0x201036E0 0x3C043F00
+
+[ULUS10160] Grand Theft Auto: Vice City Stories (US)
+_L 0x202070C8 0x00000000
+
+[UCUS98653] God of War: Chains of Olympus (US)
+_L 0xE00E003C 0x10003800
+_L 0xE00D0200 0x0001A378
+_L 0x10003800 0x0000003C
+_L 0x20003804 0x10800003
+_L 0x20003808 0x00000000
+_L 0x2000380C 0x0E2C16F9
+_L 0x20003810 0x00000000
+_L 0x20003814 0x0E2C16F9
+_L 0x20003818 0x00000000
+_L 0x2000381C 0x8FBF0010
+_L 0x20003820 0x03E00008
+_L 0x20003824 0x27BD0020
+_L 0x2001A388 0x0A200E01
+_L 0x2001A38C 0x34040000
+_L 0x2001A390 0x00000000
+
+[ULUS10455] Assassin's Creed: Bloodlines (US)
+_L 0xE00C202A 0x000D8990
+_L 0x200D8990 0x34040000
+_L 0x202A303C 0x3C888889
+_L 0x2029F8A4 0x3D19999A
+_L 0x2029F8A8 0x3CCCCCCD
+_L 0x2029F9B4 0x3D19999A
+_L 0x2029F994 0x3D19999A
+_L 0x202A0C4C 0x3D19999A
+_L 0x202A0C20 0x3D99999A
+_L 0x202A0C34 0x3E800000
+_L 0x200BE9F4 0x3C054270
+_L 0x200BEA68 0x3C054270
+_L 0x200D8A54 0x3C044270
+
+[UCUS98632] Gran Turismo (US) clock=666
+_L 0x204F5FA8 0x00000000
+
+[ULJM05472] Hatsune Miku: Project DIVA (JP)
+_L 0xE0011420 0x001D1BA2
+_L 0x201D1BA0 0x10000003

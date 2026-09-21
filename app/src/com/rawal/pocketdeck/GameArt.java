@@ -20,6 +20,7 @@ final class GameArt {
 
     static class Result {
         String title = "";
+        String discId = "";
         String icon = "";
         String background = "";
 
@@ -75,7 +76,12 @@ final class GameArt {
         return map;
     }
 
-    static String title(byte[] bArr) {
+    static String title(byte[] bArr) { return sfoString(bArr, "TITLE"); }
+
+    /** PPSSPP names its per-game files after DISC_ID ("ULUS10336"). */
+    static String discId(byte[] bArr) { return sfoString(bArr, "DISC_ID"); }
+
+    static String sfoString(byte[] bArr, String key) {
         try {
             int i = 20;
             if (bArr.length >= 20) {
@@ -95,7 +101,7 @@ final class GameArt {
                         while (i6 < bArr.length && bArr[i6] != 0) {
                             i6++;
                         }
-                        if (i5 >= 0 && i5 < bArr.length && new String(bArr, i5, i6 - i5, "UTF-8").equals("TITLE")) {
+                        if (i5 >= 0 && i5 < bArr.length && new String(bArr, i5, i6 - i5, "UTF-8").equals(key)) {
                             long jU35 = u32(bArr, i4 + 12) + jU33;
                             long jU36 = u32(bArr, i4 + 4);
                             if (jU35 >= 0 && jU36 > 0) {
@@ -233,6 +239,7 @@ final class GameArt {
                     String str11 = str3;
                     if (map.containsKey(str11)) {
                         result.title = title((byte[]) map.get(str11));
+                        result.discId = discId((byte[]) map.get(str11));
                     }
                     if (map.containsKey(str2)) {
                         str5 = str;

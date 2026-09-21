@@ -214,23 +214,44 @@ public class MainActivity extends Activity implements MediaHub.Listener {
 
     /** Optional device integration; opening Nomad never changes system display or wallpaper settings. */
     private void deviceSetup() {
-        if (Root.enabled(this)) patchEmulatorConfig();
+        patchEmulatorConfig(null);
         runOnUiThread(() -> { media.start(); sendMedia(); });
     }
 
     /**
-     * Makes PPSSPP's "Exit to menu" quit the emulator, so the launcher is what comes back.
-     * PPSSPP never writes this key itself (and drops it on every save), so it is re-applied before each launch.
+     * Prepares PPSSPP for a launch through the root path, since PPSSPP re-reads ppsspp.ini only at startup:
+     * "Exit" in the pause menu quits the emulator (PPSSPP drops that key on every save, hence per launch),
+     * cheats are switched on only when this game has its 60 FPS patch enabled, the patch itself is written
+     * to PSP/Cheats/<DISC_ID>.ini, and Gran Turismo-style patches get their emulated CPU clock. A PPSSPP
+     * that is still alive from the last game is stopped so it boots with this configuration.
      */
-    private void patchEmulatorConfig() {
+    private void patchEmulatorConfig(JSONObject game) {
         if (!Root.enabled(this)) return;
+        FpsPatches.Patch patch = game == null ? null : FpsPatches.find(this, game.optString("discId"));
+        boolean on = patch != null && "on".equals(fpsPatchState(game));
         StringBuilder script = new StringBuilder();
+        // setkey <section> <key> <value>: replaces the key inside its section, or adds it after the header (BOM-safe).
+        script.append("setkey() { awk -v s=\"[$1]\" -v k=\"$2\" -v v=\"$3\" '")
+            .append("BEGIN{d=0;insec=0} !d && !insec && index($0,s)>0 && index($0,\"[\")<=4 {print; insec=1; next} ")
+            .append("/^\\[/{ if(insec && !d){print k \" = \" v; d=1} insec=0 } ")
+            .append("insec && index($0, k \" = \")==1 { if(!d){print k \" = \" v; d=1}; next } {print} ")
+            .append("END{ if(insec && !d) print k \" = \" v }' \"$f\" > \"$f.tmp\" && cat \"$f.tmp\" > \"$f\"; rm -f \"$f.tmp\"; }; ");
         for (String ini : PPSSPP_INIS) {
-            script.append("f=").append(ini).append("; if [ -f \"$f\" ] && ! grep -q '^PauseMenuExitsEmulator = True' \"$f\"; then ")
-                .append("awk 'BEGIN{d=0} /^PauseMenuExitsEmulator/{next} {print} /\\[General\\]$/ && !d {print \"PauseMenuExitsEmulator = True\"; d=1}' \"$f\" > \"$f.tmp\" ")
-                .append("&& cat \"$f.tmp\" > \"$f\"; rm -f \"$f.tmp\"; fi; ");
+            script.append("f=").append(ini).append("; if [ -f \"$f\" ]; then ")
+                .append("setkey General PauseMenuExitsEmulator True; ")
+                .append("setkey General EnableCheats ").append(on ? "True" : "False").append("; ")
+                .append("setkey CPU CPUSpeed ").append(on ? patch.clock : 0).append("; ")
+                .append("c=\"${f%/SYSTEM/ppsspp.ini}/Cheats\"; mkdir -p \"$c\"; ");
+            if (patch != null) {
+                String file = "\"$c/" + patch.discId + ".ini\"";
+                if (on) script.append("printf '%s' '").append(patch.cheatFile().replace("'", "'\\''")).append("' > ").append(file).append("; ");
+                else script.append("grep -q Nomad ").append(file).append(" 2>/dev/null && rm -f ").append(file).append("; ");
+            }
+            script.append("fi; ");
         }
-        Root.run(script.toString(), 5);
+        if (game != null) script.append("pidof org.ppsspp.ppsspp >/dev/null 2>&1 && am force-stop org.ppsspp.ppsspp; ");
+        script.append("true");
+        Root.run(script.toString(), 8);
     }
 
     /** Lets the phone's own wallpaper — static or live — render behind the launcher window. */
@@ -376,6 +397,12 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         }
     }
 
+    /** "none" when no patch exists for this disc, otherwise the user's per-game choice (on by default). */
+    private String fpsPatchState(JSONObject game) {
+        if (game == null || FpsPatches.find(this, game.optString("discId")) == null) return "none";
+        return prefs.getBoolean("fps60." + game.optString("id"), true) ? "on" : "off";
+    }
+
     /** Art file key for a library id: PSP games use their hash, Android games hash the package. */
     private String artKey(String id) throws Exception {
         return id.startsWith("app:") ? "app-" + hash(id.substring(4)) : id;
@@ -392,6 +419,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     g.put("lastPlayed", prefs.getLong("played." + id, 0L));
                     g.put("plays", prefs.getInt("plays." + id, 0));
                     g.put("cover", coverFor(id));
+                    g.put("fpsPatch", fpsPatchState(g));
                 }
                 JSONArray appList = new JSONArray();
                 for (int i = 0; i < apps.length(); i++) {
@@ -674,18 +702,19 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 GameArt.Result art;
                 if (system != Systems.PSP) {
                     art = new GameArt.Result();   // only PSP discs carry their own icon and title
-                } else if (known == null || (known.optString("icon").isEmpty() && known.optString("background").isEmpty())) {
-                    art = GameArt.extract(getContentResolver(), doc, artDir, key);
+                } else if (known == null || (known.optString("icon").isEmpty() && known.optString("background").isEmpty()) || known.optString("discId").isEmpty()) {
+                    art = GameArt.extract(getContentResolver(), doc, artDir, key);   // also (re)reads DISC_ID for older entries
                 } else {
                     art = new GameArt.Result();
                     art.title = known.optString("title");
+                    art.discId = known.optString("discId");
                     art.icon = known.optString("icon");
                     art.background = known.optString("background");
                 }
                 String title = name.replaceFirst("\\.[^.]+$", "").replaceFirst("^\\d{3,5} - ", "").replaceAll("\\s*\\([^)]*\\)", "").replaceAll("\\s*\\[[^\\]]*\\]", "").trim();
                 if (!art.title.isEmpty()) title = art.title;
                 out.put(new JSONObject().put("id", key).put("uri", doc.toString()).put("title", title).put("filename", name)
-                    .put("icon", art.icon).put("background", art.background).put("system", system.id).put("size", cursor.isNull(3) ? 0 : cursor.getLong(3))
+                    .put("discId", art.discId).put("icon", art.icon).put("background", art.background).put("system", system.id).put("size", cursor.isNull(3) ? 0 : cursor.getLong(3))
                     .put("format", lower.substring(lower.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT)));
             }
         }
@@ -717,7 +746,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 toast("This game cannot be opened. Reconnect its folder in Settings.");
                 return;
             }
-            patchEmulatorConfig();
+            patchEmulatorConfig(game);
             runOnUiThread(() -> {
                 try {
                     Intent intent = new Intent(Intent.ACTION_VIEW).setComponent(new ComponentName(emulator, "org.ppsspp.ppsspp.PpssppActivity")).setData(uri);
@@ -845,6 +874,11 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         @JavascriptInterface public void favorite(String id) {
             if (!id.startsWith("app:") && findGame(id) == null) return;
             prefs.edit().putBoolean("favorite." + id, !prefs.getBoolean("favorite." + id, false)).apply();
+            sendState();
+        }
+        @JavascriptInterface public void fpsPatch(String id, boolean on) {
+            if (findGame(id) == null) return;
+            prefs.edit().putBoolean("fps60." + id, on).apply();
             sendState();
         }
         @JavascriptInterface public void settings(String which) { runOnUiThread(() -> MainActivity.this.settings(which)); }
