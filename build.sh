@@ -52,6 +52,9 @@ export KEY_PASS
 
 rm -rf build
 mkdir -p build/res build/classes build/dex
+cp -R app/assets build/assets
+cp LICENSE build/assets/LICENSE.txt
+cp THIRD_PARTY_NOTICES.md build/assets/THIRD_PARTY_NOTICES.txt
 cp app/AndroidManifest.xml build/AndroidManifest.xml
 if [[ "$mode" == debug ]]; then
   sed -i \
@@ -64,7 +67,7 @@ if [[ "$mode" == debug ]]; then
 fi
 aapt2 compile --dir app/res -o build/res/res.zip
 aapt2 link -o build/base.apk -I "$ANDROID_JAR" --manifest build/AndroidManifest.xml \
-  -A app/assets build/res/res.zip
+  -A build/assets build/res/res.zip
 javac -source 8 -target 8 -Xlint:-options -nowarn -classpath "$ANDROID_JAR" \
   -d build/classes app/src/com/rawal/pocketdeck/*.java
 mapfile -d '' classes < <(find build/classes -name '*.class' -print0)
