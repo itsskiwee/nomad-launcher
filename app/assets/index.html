@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self'; font-src 'self'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Nomad</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body class="booting" data-page="home" data-background="art">
+<div class="backdrop" aria-hidden="true"><img id="backdropA" alt=""><img id="backdropB" alt=""><video id="backdropVideo" muted loop playsinline preload="auto"></video></div>
+<div class="scrim" aria-hidden="true"></div>
+
+<div class="shell">
+ <header>
+  <nav aria-label="Main navigation">
+   <button data-page="home" class="active" aria-current="page">Home</button>
+   <button data-page="library">Library</button>
+   <button data-page="apps">Apps</button>
+  </nav>
+  <div class="status">
+   <button id="network" class="status-item" aria-label="Open Wi-Fi settings"></button>
+   <span id="battery" class="status-item"></span>
+   <time id="clock"></time>
+   <button class="icon-button" id="settingsButton" aria-label="Settings"></button>
+   <button class="icon-button" id="powerButton" aria-label="Power off"></button>
+  </div>
+ </header>
+
+ <main id="home" class="page active">
+  <div class="home-pages" id="homePages" tabindex="0" aria-label="Home and favorites pages">
+  <section class="home-panel" aria-label="Home games">
+  <div class="stage">
+   <div class="cover-row" id="coverRow"></div>
+   <div class="hero-caption">
+   <h1 id="heroTitle"></h1>
+    <button class="icon-button" id="artButton" aria-label="Game options">⋯</button>
+   </div>
+  </div>
+  </section>
+  <section class="home-panel favorites-panel" aria-label="Favorite games">
+   <div class="favorites-heading"><h2>Favorites</h2></div>
+   <div class="library-grid" id="homeFavorites"></div>
+  </section>
+  </div>
+  <div class="now-playing" id="nowPlaying" hidden>
+   <button class="np-open" id="npOpen" aria-label="Open music app"><img id="npArt" alt=""><span class="np-text"><b id="npTitle"></b><span id="npArtist"></span></span></button>
+   <div class="np-controls"><button id="npPrev" aria-label="Previous"></button><button id="npToggle" aria-label="Play or pause"></button><button id="npNext" aria-label="Next"></button></div>
+  </div>
+  <button class="np-launch" id="npLaunch" hidden></button>
+ </main>
+
+ <main id="library" class="page">
+  <div class="toolbar">
+   <span class="muted" id="gameCount"></span>
+   <input type="search" id="search" placeholder="Search" aria-label="Search games">
+   <button class="toggle" id="favoritesFilter" aria-pressed="false"></button>
+   <button class="icon-button" id="addGamesButton" aria-label="Add game folder"></button>
+   <button class="icon-button" id="refreshButton" aria-label="Refresh library"></button>
+  </div>
+  <div class="library-grid" id="libraryGrid"></div>
+ </main>
+
+ <main id="apps" class="page">
+  <div class="apps-grid" id="appsGrid"></div>
+ </main>
+
+ <main id="settings" class="page">
+  <aside class="settings-nav" aria-label="Settings sections">
+   <button data-section="library" class="active">Library</button>
+   <button data-section="artwork">Artwork</button>
+   <button data-section="theme">Theme</button>
+   <button data-section="music">Music</button>
+   <button data-section="performance">Performance</button>
+   <button data-section="device">Device</button>
+   <button data-section="storage">Storage</button>
+   <button data-section="about">About</button>
+  </aside>
+  <div class="settings-pane">
+
+   <section data-section="library" class="active">
+    <h2>Game folders</h2>
+    <div class="rows" id="folderRows"></div>
+    <div class="rows">
+     <button class="row" id="addFolderSetting"><span>Add folder</span><i class="chev"></i></button>
+     <button class="row" id="rescanSetting"><span>Refresh library</span><i class="chev"></i></button>
+    </div>
+    <h2>Android games</h2>
+    <div class="rows">
+     <button class="row" id="androidGamesToggle" role="switch" aria-checked="true"><span>Show installed Android games</span><i class="switch"></i></button>
+    </div>
+    <h2>Emulator</h2>
+    <div class="rows" id="emulatorRows"></div>
+    <p class="hint">Each emulator manages its own games. Open one to browse and play.</p>
+   </section>
+
+   <section data-section="artwork">
+    <h2>Game artwork</h2>
+    <div class="rows" id="artworkRows"></div>
+    <p class="hint">Pick any image for a cover. Portrait images work best. Long-press a game anywhere for the same options.</p>
+   </section>
+
+   <section data-section="theme">
+    <h2>Theme</h2>
+    <div class="rows" id="themeRows"></div>
+    <p class="hint" id="themeHint"></p>
+    <div class="rows">
+     <button class="row" id="addThemeButton"><span>Add video theme…<small>A looping video; the colours follow it</small></span><i class="chev"></i></button>
+    </div>
+    <h2>Background</h2>
+    <p class="hint" id="backgroundNote" hidden></p>
+    <div class="rows" id="backgroundRows">
+     <div class="row"><span>Show</span><div class="segment" id="backgroundMode"><button data-value="art">Game art</button><button data-value="custom">Image</button><button data-value="wallpaper">Wallpaper</button><button data-value="plain">Plain</button></div></div>
+     <button class="row" id="wallpaperPick"><span>Choose image<small id="wallpaperState"></small></span><i class="chev"></i></button>
+     <button class="row" data-setting="wallpaper"><span>Choose phone wallpaper<small>Static or live wallpaper, shown behind the launcher</small></span><i class="chev"></i></button>
+    </div>
+    <h2>Phone</h2>
+    <div class="rows">
+     <button class="row" id="blackWallpaper"><span>Set phone wallpaper to black<small>Keeps transitions seamless</small></span><i class="chev"></i></button>
+    </div>
+   </section>
+
+   <section data-section="music">
+    <h2>Now playing</h2>
+    <div class="rows">
+     <div class="row"><span>Music access<small id="musicState"></small></span><button class="inline" id="musicAccess">Grant</button></div>
+     <button class="row" id="openSpotify"><span>Open Spotify</span><i class="chev"></i></button>
+    </div>
+    <p class="hint">Whatever is playing on the phone shows on Home with play, pause and skip.</p>
+   </section>
+
+   <section data-section="performance">
+    <h2>Mode</h2>
+    <div class="rows" id="modeRows">
+     <button class="row" data-mode="saver" aria-pressed="false"><span>Power saver<small>Longer battery, lower clocks</small></span><i class="radio"></i></button>
+     <button class="row" data-mode="balanced" aria-pressed="true"><span>Balanced<small>Phone defaults</small></span><i class="radio"></i></button>
+     <button class="row" data-mode="performance" aria-pressed="false"><span>Performance<small>Higher minimum clocks</small></span><i class="radio"></i></button>
+     <button class="row" data-mode="turbo" aria-pressed="false"><span>Turbo<small>Maximum clocks, more heat</small></span><i class="radio"></i></button>
+    </div>
+    <div class="perf-detail">
+     <div class="perf-specs"><span>CPU <b id="modeCpu"></b></span><span>GPU <b id="modeGpu"></b></span></div>
+     <p class="hint" id="modeNote"></p>
+    </div>
+    <div class="perf-actions">
+     <button class="primary" id="applyPerformance" disabled>Apply</button>
+     <button class="inline" id="resetPerformance">Restore balanced</button>
+     <button class="inline" id="retryPerformance" hidden>Retry</button>
+    </div>
+    <h2>Live</h2>
+    <div class="perf-live"><span>CPU <b id="liveCpu">—</b></span><span>GPU <b id="liveGpu">—</b></span><span>Battery <b id="liveTemperature">—</b></span></div>
+    <p class="hint" id="performanceStatus">Checking root access…</p>
+   </section>
+
+   <section data-section="device">
+    <h2>Screen</h2>
+    <div class="rows">
+     <div class="row"><span>Never sleep<small>Screen stays on while Nomad runs</small></span><i class="switch on"></i></div>
+    </div>
+    <h2>System</h2>
+    <div class="rows">
+     <button class="row" data-setting="home"><span>Home launcher<small id="homeSettingText"></small></span><i class="chev"></i></button>
+     <button class="row" data-setting="wifi"><span>Wi-Fi</span><i class="chev"></i></button>
+     <button class="row" data-setting="sound"><span>Sound</span><i class="chev"></i></button>
+     <button class="row" data-setting="display"><span>Display</span><i class="chev"></i></button>
+     <button class="row" data-setting="android"><span>All Android settings</span><i class="chev"></i></button>
+    </div>
+   </section>
+
+   <section data-section="storage">
+    <h2>Internal storage</h2>
+    <div class="rows">
+     <div class="row"><span>Free<small id="storageUsed"></small></span><span class="value" id="storageFree"></span></div>
+    </div>
+    <div class="storage-bar" aria-hidden="true"><i id="storageFill"></i></div>
+    <h2>Games</h2>
+    <div class="rows" id="storageRows"></div>
+    <p class="hint">Sizes come from the last library scan. Refresh the library after adding games.</p>
+   </section>
+
+   <section data-section="about">
+    <h2>Nomad</h2>
+    <div class="rows">
+     <div class="row"><span>Version</span><span class="value" id="versionText">0.2.0</span></div>
+    </div>
+   </section>
+
+  </div>
+ </main>
+</div>
+
+<div class="menu" id="gameMenu" hidden>
+ <div class="menu-title" id="menuTitle"></div>
+ <button id="menuPlay">Play</button>
+ <button id="menuFavorite">Add to favorites</button>
+ <button id="menuArt">Choose artwork…</button>
+ <button id="menuArtReset">Use original artwork</button>
+ <button id="menuDelete" class="danger">Delete game…</button>
+</div>
+<div id="toast" role="status"></div>
+<script src="app.js"></script>
+</body>
+</html>

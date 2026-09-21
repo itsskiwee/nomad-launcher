@@ -1,0 +1,6 @@
+id=pocketdeck-blackboot
+name=PocketDeck Black Boot
+version=1.0
+versionCode=1
+author=PocketDeck
+description=Black Android boot animation before the launcher reveal.
