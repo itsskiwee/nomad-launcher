@@ -8,6 +8,10 @@ import java.util.concurrent.TimeUnit;
 final class Root {
     private Root() { }
 
+    static boolean enabled(android.content.Context context) {
+        return context.getSharedPreferences("deck", 0).getBoolean("rootFeatures", false);
+    }
+
     /** Runs a shell snippet as root; returns its stdout, or null if root was denied or it timed out. */
     static String run(String script, int timeoutSeconds) {
         try {

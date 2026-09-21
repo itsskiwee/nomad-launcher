@@ -305,9 +305,18 @@ let videoAvg = null, videoAvgSrc = '';
 function sampleVideo() {
   if (video.readyState < 2 || video.paused) return;
   if (video.dataset.src !== videoAvgSrc) { videoAvgSrc = video.dataset.src; videoAvg = null; }
-  const ctx = videoCanvas.getContext('2d');
-  ctx.drawImage(video, 0, 0, 48, 27);
-  const m = measure(ctx, 48, 27);
+  const ctx = videoCanvas.getContext('2d', { willReadFrequently: true });
+  let m;
+  try {
+    ctx.drawImage(video, 0, 0, 48, 27);
+    m = measure(ctx, 48, 27);
+  } catch (error) {
+    // Some WebViews refuse pixel access to an otherwise playable local video.
+    // Keep the cached accent and playback; retry only after a theme change.
+    clearInterval(videoTimer); videoTimer = 0;
+    videoCanvas.width = 48;
+    return;
+  }
   if (!m) { if (!autoAccent) applyAccent('#e6e8e6', 'The colours follow the video as it plays.'); return; }
   const k = videoAvg ? .3 : 1;
   videoAvg = videoAvg ? { x: videoAvg.x + (m.x - videoAvg.x) * k, y: videoAvg.y + (m.y - videoAvg.y) * k, sat: videoAvg.sat + (m.sat - videoAvg.sat) * k, lig: videoAvg.lig + (m.lig - videoAvg.lig) * k } : m;
@@ -613,6 +622,8 @@ $('npLaunch').onclick = () => native('media', 'open');
 // ---- state from native ----
 window.receiveState = next => {
   state = next;
+  $('powerButton').hidden = !state.rootFeatures;
+  $('rootFeaturesToggle').setAttribute('aria-checked', String(!!state.rootFeatures));
   const sig = JSON.stringify(state.games) + JSON.stringify(state.apps), appSig = JSON.stringify(state.apps);
   if (sig !== signature || !signature) {
     signature = sig;
@@ -865,6 +876,7 @@ $('powerButton').onclick = () => {
   if (window.Performance && typeof window.Performance.shutdown === 'function') window.Performance.shutdown();
   else notify('Power control is unavailable in this build.');
 };
+$('rootFeaturesToggle').onclick = () => native('setRootFeatures', !state.rootFeatures);
 $('network').onclick = () => native('settings', 'wifi');
 $('search').oninput = renderLibrary;
 $('favoritesFilter').innerHTML = icon('star') + 'Favorites';
@@ -1033,4 +1045,3 @@ showSection(section);
 document.body.dataset.page = page;
 renderHome();
 native('ready');
-requestPerformance();

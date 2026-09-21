@@ -1,0 +1,27 @@
+{
+  "name": "nomad-launcher",
+  "version": "0.3.0",
+  "description": "Nomad launcher frontend checks",
+  "directories": {
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "node --check app/assets/app.js && node tests/boot-reveal.cjs && python3 tests/idle-cleanup.py && playwright test",
+    "test:ui": "playwright test",
+    "screenshots": "NOMAD_SCREENSHOTS=1 playwright test -g \"documentation screenshots\""
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsskiwee/nomad-launcher.git"
+  },
+  "license": "MIT",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/itsskiwee/nomad-launcher/issues"
+  },
+  "homepage": "https://github.com/itsskiwee/nomad-launcher#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "private": true
+}

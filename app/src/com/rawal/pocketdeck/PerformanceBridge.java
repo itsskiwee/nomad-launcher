@@ -41,6 +41,7 @@ public final class PerformanceBridge {
     private final AtomicBoolean poweringOff = new AtomicBoolean();
     /** Powers the phone off immediately; the launcher's own button is the confirmation. */
     @JavascriptInterface public void shutdown() {
+        if (!Root.enabled(activity)) return;
         if (activity.isDestroyed() || !poweringOff.compareAndSet(false, true)) return;
         new Thread(() -> {
             try {
@@ -61,6 +62,10 @@ public final class PerformanceBridge {
         if ("saver".equals(mode) || "balanced".equals(mode) || "performance".equals(mode) || "turbo".equals(mode)) run(mode);
     }
     private void run(String mode) {
+        if (!Root.enabled(activity)) {
+            activity.runOnUiThread(() -> web.evaluateJavascript("window.receivePerformance && window.receivePerformance({available:false,error:'Enable root features in Settings → Device to use these controls.'})", null));
+            return;
+        }
         if (worker.isShutdown() || !busy.compareAndSet(false, true)) return;
         worker.execute(() -> {
             JSONObject result = new JSONObject();

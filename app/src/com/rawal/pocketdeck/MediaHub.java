@@ -53,12 +53,6 @@ final class MediaHub {
         return flat != null && flat.contains(component.flattenToString());
     }
 
-    /** Grants listener access through root once, so the user never sees the system dialog. */
-    void ensureAccess() {
-        if (enabled()) return;
-        Root.run("cmd notification allow_listener " + component.flattenToString());
-    }
-
     void start() {
         if (started || !enabled()) return;
         try {

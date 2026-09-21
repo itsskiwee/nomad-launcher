@@ -92,7 +92,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (!cleanupRunning) {
                 cleanupRunning = true;
                 worker.execute(() -> {
-                    try { if (cleanupVisible) IdleCleanup.run(MainActivity.this); }
+                    try { if (cleanupVisible && Root.enabled(MainActivity.this)) IdleCleanup.run(MainActivity.this); }
                     finally { cleanupRunning = false; }
                 });
             }
@@ -120,6 +120,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("deck", 0);
+        // Preserve opt-in for existing dedicated-device installs; new users start without root.
+        if (!prefs.contains("rootFeatures")) prefs.edit().putBoolean("rootFeatures", prefs.getBoolean("wallpaperSet", false)).apply();
         IdleCleanup.reset(this);
         artDir = new File(getFilesDir(), "art");
         artDir.mkdirs();
@@ -210,16 +212,9 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         worker.execute(this::deviceSetup);
     }
 
-    /** Root-backed one-time device tweaks; each is idempotent and safe to repeat per launch. */
+    /** Optional device integration; opening Nomad never changes system display or wallpaper settings. */
     private void deviceSetup() {
-        try {
-            if (Settings.System.getInt(getContentResolver(), Settings.System.SCREEN_OFF_TIMEOUT, 0) < Integer.MAX_VALUE) {
-                Root.run("settings put system screen_off_timeout " + Integer.MAX_VALUE);
-            }
-        } catch (Exception ignored) { }
-        patchEmulatorConfig();
-        media.ensureAccess();
-        if (!prefs.getBoolean("wallpaperSet", false) && setBlackWallpaper()) prefs.edit().putBoolean("wallpaperSet", true).apply();
+        if (Root.enabled(this)) patchEmulatorConfig();
         runOnUiThread(() -> { media.start(); sendMedia(); });
     }
 
@@ -228,6 +223,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
      * PPSSPP never writes this key itself (and drops it on every save), so it is re-applied before each launch.
      */
     private void patchEmulatorConfig() {
+        if (!Root.enabled(this)) return;
         StringBuilder script = new StringBuilder();
         for (String ini : PPSSPP_INIS) {
             script.append("f=").append(ini).append("; if [ -f \"$f\" ] && ! grep -q '^PauseMenuExitsEmulator = True' \"$f\"; then ")
@@ -430,7 +426,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 File wallpaper = new File(artDir, "wallpaper.jpg");
                 state.put("wallpaper", wallpaper.exists() ? "wallpaper.jpg?v=" + wallpaper.lastModified() : "");
                 state.put("mediaAccess", media.enabled());
-                state.put("version", "0.2.0");
+                state.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+                state.put("rootFeatures", Root.enabled(this));
                 if (webGone) return;
                 pageAskedAt = System.currentTimeMillis();
                 web.evaluateJavascript("window.receiveState && window.receiveState(" + state + ")", value -> pageAnsweredAt = System.currentTimeMillis());
@@ -822,6 +819,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     // ---- JS bridge ----
 
     final class Bridge {
+        @JavascriptInterface public void setRootFeatures(boolean enabled) {
+            prefs.edit().putBoolean("rootFeatures", enabled).apply();
+            sendState();
+        }
         @JavascriptInterface public void ready() { sendState(); sendMedia(); }
         /** Internal storage totals plus what the launcher itself keeps (artwork, video themes). */
         @JavascriptInterface public String storage() {
@@ -870,7 +871,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     String pkg = media.sessionPackage();
                     MainActivity.this.openApp(pkg != null ? pkg : "com.spotify.music");
                 } else if ("access".equals(action)) {
-                    worker.execute(() -> { media.ensureAccess(); runOnUiThread(() -> { media.start(); sendMedia(); sendState(); }); });
+                    try { startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)); }
+                    catch (Exception e) { toast("Open Android Settings and enable Nomad notification access."); }
                 } else {
                     media.control(action);
                 }

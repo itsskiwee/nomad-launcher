@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a reproducible problem in Nomad.
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Nomad version
+      placeholder: "0.3.0 (official APK or self-built)"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device, Android version, and WebView version
+      placeholder: "Redmi Note 8 Pro / Android 13 / WebView ..."
+    validations:
+      required: true
+  - type: dropdown
+    id: root
+    attributes:
+      label: Root features
+      options: [Disabled, Enabled, Not sure]
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include emulator name/version if this concerns launching a game.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Screenshots or relevant logs
+      description: Remove personal paths, credentials, and unrelated device data. Do not upload ROMs.

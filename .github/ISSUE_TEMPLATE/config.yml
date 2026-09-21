@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/itsskiwee/nomad-launcher/security/advisories/new
+    about: Report security issues privately.
+  - name: Setup and compatibility
+    url: https://github.com/itsskiwee/nomad-launcher/blob/main/docs/getting-started.md
+    about: Check installation and emulator setup before reporting a bug.
