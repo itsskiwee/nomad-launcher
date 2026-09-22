@@ -731,13 +731,21 @@ function renderTracking() {
     row.append(name, value); $('playtimeRows').append(row);
   }
   if (!games.length) $('playtimeRows').textContent = 'Add games to see your playtime here.';
-  const b = state.batteryStats || {}, ready = b.ready && !state.charging;
-  $('batteryCharge').textContent = state.battery >= 0 ? `${state.battery}%${state.charging ? ' · Plugged in' : ''}` : 'Unavailable';
-  $('batteryLost').textContent = state.charging || state.battery < 0 ? '—' : `${b.lost || 0} percentage points`;
+  const b = state.batteryStats || {};
+  const flow = b.flow || (state.charging ? 'charging' : 'discharging');
+  const charging = flow === 'charging', full = flow === 'full';
+  const labels = { charging: 'Charging', discharging: 'Discharging', full: 'Full', idle: 'Not charging' };
+  $('batteryCharge').textContent = state.battery >= 0 ? `${state.battery}% · ${labels[flow] || 'Unknown'}${state.charging && flow === 'discharging' ? ' · Plugged in' : ''}` : 'Unavailable';
+  $('batteryPower').textContent = Number.isFinite(b.watts) ? `${Math.abs(b.watts).toFixed(1)} W${b.watts > 0 ? ' in' : b.watts < 0 ? ' out' : ''}` : 'Unavailable on this device';
+  const change = b.change ?? -(b.lost || 0);
+  $('batteryLost').textContent = state.battery < 0 ? '—' : `${change > 0 ? '+' : ''}${change} percentage points`;
   $('batteryWindow').textContent = `Over ${formatDuration(b.observedMs)} observed`;
-  $('batteryRate').textContent = ready ? `${b.rate.toFixed(1)}% / hour` : '—';
-  $('batteryRemaining').textContent = ready ? `About ${formatDuration(b.remainingMs)}` : '—';
-  $('batteryHint').textContent = state.charging ? 'Unplug to start a new discharge observation.' : ready ? 'Estimate changes with brightness, game load, and standby time.' : 'Learning your drain rate. Needs at least 10 minutes and a 2 percentage point drop.';
+  $('batteryRate').textContent = b.ready ? `${charging ? '+' : '−'}${b.rate.toFixed(1)}% / hour` : '—';
+  $('batteryEstimateLabel').textContent = charging || full ? 'Estimated time to full' : 'Estimated time remaining';
+  const hasEstimate = Number.isFinite(b.remainingMs) && b.remainingMs >= 0 && !full && (charging || flow === 'discharging');
+  $('batteryRemaining').textContent = full ? 'Fully charged' : hasEstimate ? `About ${formatDuration(b.remainingMs)}` : '—';
+  $('batteryHint').textContent = full ? 'Battery is full.' : hasEstimate ? `${b.estimateSource || 'Observed percentage change'}. Estimate changes with game load, temperature, and brightness.` : flow === 'idle' ? 'Power is connected but the battery is not charging.' : 'Learning the battery rate. Percentage estimates need at least 10 minutes and a 2 percentage point change.';
+
 }
 $('battery').onclick = () => { goPage('settings'); showSection('battery'); };
 

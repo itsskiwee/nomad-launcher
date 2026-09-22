@@ -455,7 +455,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 int scale = battery == null ? 100 : Math.max(1, battery.getIntExtra("scale", 100));
                 state.put("battery", level >= 0 ? Math.round(level * 100f / scale) : -1);
                 state.put("charging", battery != null && battery.getIntExtra("plugged", 0) != 0);
-                state.put("batteryStats", batteryTracker.snapshot());
+                state.put("batteryStats", batteryTracker.snapshot(this, battery));
                 state.put("usageAccess", playTracker.enabled());
                 state.put("network", networkName());
                 state.put("emulator", emulator != null);

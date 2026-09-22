@@ -1,6 +1,6 @@
 {
   "name": "nomad-launcher",
-  "version": "0.3.1",
+  "version": "0.3.1-1",
   "description": "Nomad launcher frontend checks",
   "directories": {
     "test": "tests"

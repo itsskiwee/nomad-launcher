@@ -40,7 +40,10 @@ Enable it in Settings → Playtime. Time before enabling access is not imported.
 Emulator menus count, and games switched inside an emulator cannot be distinguished.
 Sessions interrupted by a reboot may be omitted; Android may also expire old events.
 
-Battery observations stay in memory and reset when Nomad's process restarts, a
-charger is connected or the reported percentage rises. The estimate uses the
-observed device-wide discharge average after at least 10 minutes and a two-point
-drop. It includes standby and other apps and is not a battery health measurement.
+Battery observations stay in memory and reset when Nomad's process restarts or
+the charge state changes. Net battery watts use Android battery current and voltage,
+not the charger's rated or wall-socket power. Time estimates prefer Android's time
+to full, then observed percentage changes (at least 10 minutes and a two-point
+change), then battery-gauge charge capacity and average current. All readings are
+local. Estimates assume similar usage, include other apps and standby, and may
+change as charging slows near full. This is not a battery health measurement.

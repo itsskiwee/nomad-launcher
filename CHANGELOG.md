@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1.1 — 2026-09-22
+
+- Show measured net battery power in watts, with charging/discharging direction.
+- Estimate time to full using Android’s charge estimate, observed charge gain, or battery-gauge average current.
+- Estimate discharge time from the battery gauge while percentage observations are warming up.
+- Distinguish plugged-in, charging, draining while plugged in, idle, and full states.
+- Show unavailable readings honestly on devices without supported battery sensors.
+
 ## 0.3.1 — 2026-09-22
 
 - Add per-game total playtime and last-session duration with optional Android usage access.

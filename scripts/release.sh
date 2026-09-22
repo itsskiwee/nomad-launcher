@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 version="${1:?Usage: ./scripts/release.sh VERSION}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected version X.Y.Z' >&2; exit 1; }
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo 'Expected version X.Y.Z or X.Y.Z.N' >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo 'Commit or stash working changes first.' >&2; exit 1; }
 [[ "$(git branch --show-current)" == main ]] || { echo 'Release from main.' >&2; exit 1; }
 git fetch origin main

@@ -5,7 +5,8 @@ a development APK with a separate development certificate; CI never receives the
 release signing key. This keeps signing separate from code contributed by forks.
 
 1. Update the manifest version name/code, `package.json`/lockfile, and changelog.
-   The Android version display reads the manifest at runtime.
+   The Android version display reads the manifest at runtime. Four-part Android
+   hotfix versions such as `0.3.1.1` use `0.3.1-1` in npm metadata for SemVer compatibility.
 2. Run `npm ci`, `npm test`, and `./build.sh --release`.
 3. Install the signed APK on a test device and check startup, library, Favorites,
    settings, and permissions. Test a clean installation separately from upgrades.

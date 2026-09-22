@@ -142,12 +142,13 @@
     <h2>Battery</h2>
     <div class="rows">
      <div class="row"><span>Charge</span><span class="value" id="batteryCharge"></span></div>
-     <div class="row"><span>Charge lost<small id="batteryWindow"></small></span><span class="value" id="batteryLost"></span></div>
-     <div class="row"><span>Average drain</span><span class="value" id="batteryRate"></span></div>
-     <div class="row"><span>Estimated time remaining</span><span class="value" id="batteryRemaining"></span></div>
+     <div class="row"><span>Net battery power<small>Power entering or leaving the battery</small></span><span class="value" id="batteryPower"></span></div>
+     <div class="row"><span>Charge change<small id="batteryWindow"></small></span><span class="value" id="batteryLost"></span></div>
+     <div class="row"><span>Average change</span><span class="value" id="batteryRate"></span></div>
+     <div class="row"><span id="batteryEstimateLabel">Estimated time remaining</span><span class="value" id="batteryRemaining"></span></div>
     </div>
     <p class="hint" id="batteryHint"></p>
-    <p class="hint">Based on observed battery percentage changes across the device, including games and standby. Resets when plugged in, charge rises, or Nomad restarts. Remaining time assumes similar usage.</p>
+    <p class="hint">Watts show net battery power, not the charger’s rated output. Estimates assume similar usage; charging slows near full. Observations reset on charge-state changes or when Nomad restarts.</p>
    </section>
 
    <section data-section="performance">
@@ -206,7 +207,7 @@
    <section data-section="about">
     <h2>Nomad</h2>
     <div class="rows">
-     <div class="row"><span>Version</span><span class="value" id="versionText">0.3.1</span></div>
+     <div class="row"><span>Version</span><span class="value" id="versionText">0.3.1.1</span></div>
     </div>
     <p class="hint">Open source under the MIT License.<br>© 2026 Nomad Launcher contributors.<br>github.com/itsskiwee/nomad-launcher</p>
    </section>
