@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.3.1 — 2026-09-22
+
+- Add per-game total playtime and last-session duration with optional Android usage access.
+- Add a Playtime settings page and game-menu statistics.
+- Add battery charge loss, average discharge rate, and estimated remaining time.
+- Open battery details by tapping the status-bar battery indicator.
+- Add foreground-session accounting and tracking UI tests.
+
 ## 0.3.0 — 2026-09-21
 
 First packaged public release of Nomad Launcher.

@@ -511,3 +511,9 @@ body.intro .shell { animation: deck-enter .95s cubic-bezier(.16, 1, .3, 1) both;
 @media (prefers-reduced-motion: reduce) {
   *, *:before, *:after { animation: none !important; transition: none !important; }
 }
+
+/* Tracking details share the existing settings rows. */
+#battery { background: transparent; color: inherit; border: 0; cursor: pointer; font: inherit; }
+.menu-stats { padding: 0 16px 10px; font-size: 11px; color: var(--muted); max-width: 270px; }
+#playtimeRows .row > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+#playtimeRows .value { white-space: nowrap; margin-left: 16px; }

@@ -30,3 +30,17 @@ separate privacy practices.
 Logs can contain error details and local paths. Review/redact logs before attaching
 them to a public bug report. Public GitHub interactions are governed by GitHub's
 own policies.
+
+## Playtime and battery observations
+
+Optional Android usage access lets Nomad count foreground app/emulator intervals
+for games launched from Nomad. Only per-game totals, last-session duration and the
+current launch marker are saved locally; raw usage events are not stored or sent.
+Enable it in Settings → Playtime. Time before enabling access is not imported.
+Emulator menus count, and games switched inside an emulator cannot be distinguished.
+Sessions interrupted by a reboot may be omitted; Android may also expire old events.
+
+Battery observations stay in memory and reset when Nomad's process restarts, a
+charger is connected or the reported percentage rises. The estimate uses the
+observed device-wide discharge average after at least 10 minutes and a two-point
+drop. It includes standby and other apps and is not a battery health measurement.

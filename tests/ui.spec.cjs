@@ -5,7 +5,7 @@ const colors = ['#74c7b8', '#e6ac73', '#a39ccc', '#c3ce8a', '#90b5da', '#d39191'
 const snapshot = {
   games: titles.map((title, i) => ({ id: String(i), title, cover: `demo-${i}.jpg`, favorite: i < 2, plays: 8 - i })),
   apps: [], folders: [], appsLoaded: true, scanning: false, rootFeatures: false,
-  battery: 85, network: 'Wi-Fi', version: '0.3.0',
+  battery: 85, network: 'Wi-Fi', version: '0.3.1',
 };
 async function openApp(page, state = snapshot) {
   const errors = [];
@@ -109,4 +109,35 @@ test('documentation screenshots', async ({ page }) => {
   await page.evaluate(() => goPage('library'));
   await page.waitForTimeout(300);
   await page.screenshot({ path: 'docs/screenshots/library.png' });
+});
+
+test('playtime totals, ordering, last session and access guidance', async ({ page }) => {
+  const errors = await openApp(page, { ...snapshot, usageAccess: true,
+    games: snapshot.games.map((g, i) => ({ ...g, playtimeMs: i === 1 ? 7200000 : 0, lastSessionMs: i === 1 ? 1800000 : 0 })) });
+  await page.evaluate(() => { goPage('settings'); showSection('playtime'); });
+  await expect(page.locator('#totalPlaytime')).toHaveText('2h 0m');
+  await expect(page.locator('#playtimeRows .row').first()).toContainText('Drift Circuit');
+  await expect(page.locator('#playtimeRows .row').first()).toContainText('Last session: 30 min');
+  await expect(page.locator('#trackingState')).toContainText('Enabled');
+  await page.evaluate(() => receiveState({ ...fixture, usageAccess: false }));
+  await expect(page.locator('#trackingState')).toContainText('Enable Android usage access');
+  expect(errors).toEqual([]);
+});
+test('battery shortcut, discharge estimate, learning and charging states', async ({ page }) => {
+  const errors = await openApp(page, { ...snapshot, battery: 80, batteryStats: {
+    ready: true, rate: 10, lost: 5, observedMs: 1800000, remainingMs: 28800000,
+  } });
+  await page.locator('#battery').click();
+  await expect(page.locator('[data-section="battery"] h2')).toBeVisible();
+  await expect(page.locator('#batteryRate')).toHaveText('10.0% / hour');
+  await expect(page.locator('#batteryRemaining')).toHaveText('About 8h 0m');
+  await expect(page.locator('#batteryLost')).toHaveText('5 percentage points');
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: 'test-results/battery.png' });
+  await page.evaluate(() => receiveState({ ...fixture, charging: true }));
+  await expect(page.locator('#batteryRemaining')).toHaveText('—');
+  await expect(page.locator('#batteryHint')).toContainText('Unplug');
+  await page.evaluate(() => receiveState({ ...fixture, batteryStats: { ready: false } }));
+  await expect(page.locator('#batteryHint')).toContainText('Learning');
+  expect(errors).toEqual([]);
 });

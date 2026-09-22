@@ -72,6 +72,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     private File artDir;
     private SharedPreferences prefs;
     private WebView web;
+    private PlayTracker playTracker;
+    private final BatteryTracker batteryTracker = new BatteryTracker();
     private MediaHub media;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler timer = new Handler(Looper.getMainLooper());
@@ -113,13 +115,14 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         }
     };
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context context, Intent intent) { sendState(); }
+        @Override public void onReceive(Context context, Intent intent) { batteryTracker.sample(intent); sendState(); }
     };
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("deck", 0);
+        playTracker = new PlayTracker(this);
         // Preserve opt-in for existing dedicated-device installs; new users start without root.
         if (!prefs.contains("rootFeatures")) prefs.edit().putBoolean("rootFeatures", prefs.getBoolean("wallpaperSet", false)).apply();
         IdleCleanup.reset(this);
@@ -296,7 +299,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         web.resumeTimers();
         immersive();
         timer.removeCallbacks(ticker);
-        if (!worker.isShutdown()) worker.execute(() -> { refreshDeviceFacts(); runOnUiThread(ticker); });
+        if (!worker.isShutdown()) worker.execute(() -> { playTracker.settle(); refreshDeviceFacts(); runOnUiThread(ticker); });
         else timer.post(ticker);
         media.start();
         sendMedia();
@@ -417,6 +420,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     String id = g.getString("id");
                     g.put("favorite", prefs.getBoolean("favorite." + id, false));
                     g.put("lastPlayed", prefs.getLong("played." + id, 0L));
+                    g.put("playtimeMs", playTracker.total(id));
+                    g.put("lastSessionMs", playTracker.last(id));
                     g.put("plays", prefs.getInt("plays." + id, 0));
                     g.put("cover", coverFor(id));
                     g.put("fpsPatch", fpsPatchState(g));
@@ -428,6 +433,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     a.put("id", id);
                     a.put("favorite", prefs.getBoolean("favorite." + id, false));
                     a.put("lastPlayed", prefs.getLong("played." + id, 0L));
+                    a.put("playtimeMs", playTracker.total(id));
+                    a.put("lastSessionMs", playTracker.last(id));
                     a.put("plays", prefs.getInt("plays." + id, 0));
                     a.put("cover", coverFor(id));
                     appList.put(a);
@@ -448,6 +455,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 int scale = battery == null ? 100 : Math.max(1, battery.getIntExtra("scale", 100));
                 state.put("battery", level >= 0 ? Math.round(level * 100f / scale) : -1);
                 state.put("charging", battery != null && battery.getIntExtra("plugged", 0) != 0);
+                state.put("batteryStats", batteryTracker.snapshot());
+                state.put("usageAccess", playTracker.enabled());
                 state.put("network", networkName());
                 state.put("emulator", emulator != null);
                 state.put("defaultHome", defaultHome);
@@ -728,7 +737,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
 
     private void launch(String id) {
         if (id.startsWith("app:")) {
-            if (openApp(id.substring(4))) { recordPlay(id); sendState(); }
+            long started = System.currentTimeMillis();
+            if (openApp(id.substring(4))) { playTracker.begin(id, id.substring(4), started); recordPlay(id); sendState(); }
             return;
         }
         JSONObject game = findGame(id);
@@ -752,7 +762,9 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     Intent intent = new Intent(Intent.ACTION_VIEW).setComponent(new ComponentName(emulator, "org.ppsspp.ppsspp.PpssppActivity")).setData(uri);
                     intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                     intent.setClipData(ClipData.newRawUri("PSP game", uri));
+                    long started = System.currentTimeMillis();
                     startActivity(intent);
+                    playTracker.begin(id, emulator, started);
                     recordPlay(id);
                     sendState();
                 } catch (Exception e) {
@@ -766,7 +778,9 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     private void launchOn(Systems.System system, String id, Uri uri) {
         if (!Systems.installed(this, system.pkg)) { toast("Install " + emulatorName(system) + " to play " + system.name + " games."); return; }
         try {
+            long started = System.currentTimeMillis();
             startActivity(Systems.launch(this, system, uri));
+            playTracker.begin(id, system.pkg, started);
             recordPlay(id);
             sendState();
         } catch (Exception e) {
@@ -827,6 +841,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     private void settings(String which) {
         String action;
         switch (which) {
+            case "usage": action = Settings.ACTION_USAGE_ACCESS_SETTINGS; break;
             case "wifi": action = Settings.ACTION_WIFI_SETTINGS; break;
             case "display": action = Settings.ACTION_DISPLAY_SETTINGS; break;
             case "sound": action = Settings.ACTION_SOUND_SETTINGS; break;

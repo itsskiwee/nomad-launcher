@@ -39,6 +39,8 @@ binaries, commercial cover art, BIOS files, and video themes are not bundled.
 - **Searchable library.** Android games and ROM folders together, with explicit game menus.
 - **Emulator handoff.** PPSSPP, DuckStation, NetherSX2, M64Plus FZ, and RetroArch integrations.
 - **Make it yours.** Custom covers, wallpaper, local video themes, and adaptive colors.
+- **Playtime.** Per-game totals and last-session time for games launched through Nomad, with optional Android usage access.
+- **Battery insights.** Observed charge loss, average drain, and estimated remaining time; tap the battery indicator.
 - **Keep music close.** Playback controls after granting Android notification access.
 - **Optional root controls.** Supported-device performance profiles, shutdown, idle cleanup,
   and PPSSPP exit integration. Disabled by default on new installations.

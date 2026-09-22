@@ -20,7 +20,7 @@
   </nav>
   <div class="status">
    <button id="network" class="status-item" aria-label="Open Wi-Fi settings"></button>
-   <span id="battery" class="status-item"></span>
+   <button id="battery" class="status-item" aria-label="Battery details"></button>
    <time id="clock"></time>
    <button class="icon-button" id="settingsButton" aria-label="Settings"></button>
    <button class="icon-button" id="powerButton" aria-label="Power off"></button>
@@ -71,6 +71,8 @@
    <button data-section="artwork">Artwork</button>
    <button data-section="theme">Theme</button>
    <button data-section="music">Music</button>
+   <button data-section="playtime">Playtime</button>
+   <button data-section="battery">Battery</button>
    <button data-section="performance">Performance</button>
    <button data-section="device">Device</button>
    <button data-section="storage">Storage</button>
@@ -129,6 +131,25 @@
     <p class="hint">Whatever is playing on the phone shows on Home with play, pause and skip.</p>
    </section>
 
+   <section data-section="playtime">
+    <h2>Time played <span class="value" id="totalPlaytime"></span></h2>
+    <div class="rows"><button class="row" data-setting="usage"><span>Playtime tracking<small id="trackingState"></small></span><i class="chev"></i></button></div>
+    <p class="hint">Tracks games launched through Nomad after usage access is enabled. Updates when you return. Emulator menus count as playtime; switching games inside an emulator stays attributed to the game launched here.</p>
+    <div class="rows" id="playtimeRows"></div>
+   </section>
+
+   <section data-section="battery">
+    <h2>Battery</h2>
+    <div class="rows">
+     <div class="row"><span>Charge</span><span class="value" id="batteryCharge"></span></div>
+     <div class="row"><span>Charge lost<small id="batteryWindow"></small></span><span class="value" id="batteryLost"></span></div>
+     <div class="row"><span>Average drain</span><span class="value" id="batteryRate"></span></div>
+     <div class="row"><span>Estimated time remaining</span><span class="value" id="batteryRemaining"></span></div>
+    </div>
+    <p class="hint" id="batteryHint"></p>
+    <p class="hint">Based on observed battery percentage changes across the device, including games and standby. Resets when plugged in, charge rises, or Nomad restarts. Remaining time assumes similar usage.</p>
+   </section>
+
    <section data-section="performance">
     <h2>Mode</h2>
     <div class="rows" id="modeRows">
@@ -185,7 +206,7 @@
    <section data-section="about">
     <h2>Nomad</h2>
     <div class="rows">
-     <div class="row"><span>Version</span><span class="value" id="versionText">0.3.0</span></div>
+     <div class="row"><span>Version</span><span class="value" id="versionText">0.3.1</span></div>
     </div>
     <p class="hint">Open source under the MIT License.<br>© 2026 Nomad Launcher contributors.<br>github.com/itsskiwee/nomad-launcher</p>
    </section>
@@ -196,6 +217,7 @@
 
 <div class="menu" id="gameMenu" hidden>
  <div class="menu-title" id="menuTitle"></div>
+ <div class="menu-stats" id="menuPlaytime"></div>
  <button id="menuPlay">Play</button>
  <button id="menuFavorite">Add to favorites</button>
  <button id="menuArt">Choose artwork…</button>

@@ -653,6 +653,7 @@ function openGameMenu(game, x, y) {
   menuGame = game; deleteArmed = false;
   const menu = $('gameMenu');
   $('menuTitle').textContent = game.title;
+  $('menuPlaytime').textContent = `${formatDuration(game.playtimeMs)} played · Last session ${formatDuration(game.lastSessionMs)}`;
   $('menuFavorite').textContent = game.favorite ? 'Remove from favorites' : 'Add to favorites';
   $('menuArtReset').hidden = !game.cover;
   // Only discs with a known 60 FPS patch get the row; the launcher applies it through PPSSPP's cheat file.
@@ -708,6 +709,38 @@ function showSection(name) {
 }
 document.querySelectorAll('.settings-nav button').forEach(b => b.onclick = () => showSection(b.dataset.section));
 
+// ---- playtime and battery ----
+function formatDuration(ms) {
+  if (!Number.isFinite(ms) || ms <= 0) return '0 min';
+  if (ms < 60000) return '<1 min';
+  const minutes = Math.floor(ms / 60000);
+  return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+function renderTracking() {
+  const games = state.games.concat((state.apps || []).filter(a => a.game && !isEmulator({ ...a, android: true })));
+  games.sort((a, b) => (b.playtimeMs || 0) - (a.playtimeMs || 0) || a.title.localeCompare(b.title));
+  $('totalPlaytime').textContent = formatDuration(games.reduce((sum, g) => sum + (g.playtimeMs || 0), 0));
+  $('trackingState').textContent = state.usageAccess ? 'Enabled · Manage Android usage access' : 'Enable Android usage access to start tracking';
+  $('playtimeRows').replaceChildren();
+  for (const game of games) {
+    const row = document.createElement('div'); row.className = 'row';
+    const name = document.createElement('span'); name.textContent = game.title;
+    const last = document.createElement('small'); last.textContent = `Last session: ${formatDuration(game.lastSessionMs)}`;
+    name.append(last);
+    const value = document.createElement('span'); value.className = 'value'; value.textContent = formatDuration(game.playtimeMs);
+    row.append(name, value); $('playtimeRows').append(row);
+  }
+  if (!games.length) $('playtimeRows').textContent = 'Add games to see your playtime here.';
+  const b = state.batteryStats || {}, ready = b.ready && !state.charging;
+  $('batteryCharge').textContent = state.battery >= 0 ? `${state.battery}%${state.charging ? ' · Plugged in' : ''}` : 'Unavailable';
+  $('batteryLost').textContent = state.charging || state.battery < 0 ? '—' : `${b.lost || 0} percentage points`;
+  $('batteryWindow').textContent = `Over ${formatDuration(b.observedMs)} observed`;
+  $('batteryRate').textContent = ready ? `${b.rate.toFixed(1)}% / hour` : '—';
+  $('batteryRemaining').textContent = ready ? `About ${formatDuration(b.remainingMs)}` : '—';
+  $('batteryHint').textContent = state.charging ? 'Unplug to start a new discharge observation.' : ready ? 'Estimate changes with brightness, game load, and standby time.' : 'Learning your drain rate. Needs at least 10 minutes and a 2 percentage point drop.';
+}
+$('battery').onclick = () => { goPage('settings'); showSection('battery'); };
+
 // ---- storage ----
 function formatBytes(n) {
   if (!n) return '0 MB';
@@ -745,6 +778,7 @@ function renderStorage() {
 }
 
 function renderSettings() {
+  renderTracking();
   const rows = $('folderRows');
   rows.replaceChildren();
   state.folders.forEach(f => {

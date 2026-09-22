@@ -1,6 +1,6 @@
 {
   "name": "nomad-launcher",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Nomad launcher frontend checks",
   "directories": {
     "test": "tests"
@@ -8,7 +8,8 @@
   "scripts": {
     "test": "node --check app/assets/app.js && node tests/boot-reveal.cjs && python3 tests/idle-cleanup.py && playwright test",
     "test:ui": "playwright test",
-    "screenshots": "NOMAD_SCREENSHOTS=1 playwright test -g \"documentation screenshots\""
+    "screenshots": "NOMAD_SCREENSHOTS=1 playwright test -g \"documentation screenshots\"",
+    "test:playtime": "bash tests/playtime.sh"
   },
   "repository": {
     "type": "git",

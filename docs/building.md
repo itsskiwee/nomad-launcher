@@ -60,6 +60,7 @@ keys are not available to contributors or public CI.
 npm ci
 npx playwright install --with-deps chromium
 npm test
+npm run test:playtime # requires the JDK
 ```
 
 Tests require Node.js 22+ and Python 3. The browser tests serve `app/assets` locally
