@@ -53,7 +53,7 @@ function artUrl(name) {
 
 // PSP games and installed Android games share one library shape.
 function allGames() {
-  const psp = state.games.map(g => ({ ...g, android: false }));
+  const psp = state.games.filter(g => !g.alt && !g.hidden).map(g => ({ ...g, android: false }));
   const apps = androidGames ? state.apps
     .map(a => ({ ...a, android: true }))
     .filter(a => a.game && !isEmulator(a)) : [];
@@ -664,6 +664,9 @@ function openGameMenu(game, x, y) {
   const sys = game.android ? null : systemOf(game);
   $('menuEmulator').hidden = !sys || sys.options.filter(o => o.installed).length < 2 && !game.emuChoice;
   if (sys) $('menuEmulator').textContent = 'Play with: ' + (optionLabel(sys, game.emuChoice) || optionLabel(sys, sys.choice) || 'none installed');
+  $('menuVersion').hidden = !(game.versions && game.versions.length > 1);
+  if (!$('menuVersion').hidden) $('menuVersion').textContent = 'Version: ' + (game.version || game.format);
+  $('menuHide').hidden = !!game.android;
   $('menuDelete').textContent = game.android ? 'Uninstall…' : 'Delete game…';
   $('menuDelete').classList.remove('confirm');
   menu.hidden = false;
@@ -705,6 +708,13 @@ $('menuEmulator').onclick = e => {
   closeGameMenu();
   if (g) openEmulatorChooser('game', systemOf(g), g.emuChoice, r.left, r.top, g);
 };
+$('menuVersion').onclick = e => {
+  e.stopPropagation();
+  const g = menuGame, r = $('gameMenu').getBoundingClientRect();
+  closeGameMenu();
+  if (g) openChooser(`${g.title} · version`, g.versions.map(v => ({ label: v.label, checked: v.id === g.id, run: () => { selected = v.id; native('setVersion', v.id); } })), r.left, r.top);
+};
+$('menuHide').onclick = () => { const g = menuGame; closeGameMenu(); if (g) { if (selected === g.id) selected = ''; native('hide', g.id, true); notify(`${g.title} hidden. Settings › Library brings it back.`); } };
 $('menuFps').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('fpsPatch', g.id, g.fpsPatch !== 'on'); };
 // Deleting a file is irreversible, so the first tap only arms the button.
 $('menuDelete').onclick = e => {
@@ -847,6 +857,9 @@ function renderSettings() {
   }
   renderArtworkRows();
   renderEmulatorRows();
+  const hidden = state.games.filter(g => g.hidden);
+  $('hiddenGames').hidden = !hidden.length;
+  $('hiddenCount').textContent = `${hidden.length} ${hidden.length === 1 ? 'game' : 'games'}`;
   $('androidGamesToggle').setAttribute('aria-checked', String(androidGames));
   document.querySelectorAll('#backgroundMode button').forEach(b => b.classList.toggle('active', b.dataset.value === backgroundMode));
   $('wallpaperState').textContent = state.wallpaper ? 'Custom image set' : 'No image chosen';
@@ -905,6 +918,11 @@ function appName(pkg) {
 }
 $('addFolderSetting').onclick = () => native('chooseFolder');
 $('rescanSetting').onclick = () => native('refresh');
+$('hiddenGames').onclick = e => {
+  e.stopPropagation();
+  const r = $('hiddenGames').getBoundingClientRect();
+  openChooser('Tap a game to show it again', state.games.filter(g => g.hidden).map(g => ({ label: g.title, sub: g.version, run: () => native('hide', g.id, false) })), r.right - 300, r.bottom);
+};
 $('androidGamesToggle').onclick = () => { androidGames = !androidGames; prefs.set('androidGames', androidGames); renderSettings(); renderHome(); renderLibrary(); };
 // One row per system that has games: the emulator that will play them, tap to choose another.
 function optionLabel(sys, key) {

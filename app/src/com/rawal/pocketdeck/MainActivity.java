@@ -49,6 +49,8 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -416,7 +418,9 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     decorate(g, g.getString("id"));
                     g.put("fpsPatch", fpsPatchState(g));
                     g.put("emuChoice", prefs.getString("emu.game." + g.getString("id"), ""));
+                    if (prefs.getBoolean("hidden." + g.getString("id"), false)) g.put("hidden", true);
                 }
+                foldVersions(games);
                 JSONArray appList = new JSONArray();
                 for (int i = 0; i < apps.length(); i++) {
                     JSONObject a = new JSONObject(apps.getJSONObject(i).toString());
@@ -673,12 +677,18 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             try {
                 JSONArray found = new JSONArray();
                 List<String> broken = new ArrayList<>();
+                Map<String, JSONObject> known = new HashMap<>();
+                JSONArray previous = games();
+                for (int i = 0; i < previous.length(); i++) {
+                    JSONObject g = previous.optJSONObject(i);
+                    if (g != null) known.put(g.optString("id"), g);
+                }
                 for (String folder : list) {
                     try {
                         Uri uri = Uri.parse(folder);
                         String leaf = folderName(folder);
                         Systems.System root = Systems.forFolder(leaf.substring(leaf.lastIndexOf('/') + 1).trim());
-                        walk(uri, DocumentsContract.getTreeDocumentId(uri), 0, found, new int[] { 0 }, root == null ? Systems.PSP : root);
+                        walk(uri, DocumentsContract.getTreeDocumentId(uri), 0, found, new int[] { 0 }, root == null ? Systems.PSP : root, known);
                     } catch (Exception e) {
                         Log.w("PocketDeck", "Scan " + folder, e);
                         broken.add(folderName(folder));
@@ -692,13 +702,38 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             } finally {
                 scanning = false;
                 sendState();
+                afterScan();
             }
         });
     }
 
-    private void walk(Uri tree, String documentId, int depth, JSONArray out, int[] visited, Systems.System system) throws Exception {
+    /** Work that follows every scan (artwork downloads). */
+    private void afterScan() { }
+
+    /** Folders that hold emulator data or scraped media rather than games. */
+    private static final HashSet<String> SKIP_DIRS = new HashSet<>(Arrays.asList(
+        "bios", "system", "saves", "save", "savedata", "states", "savestates", "screenshots", "media", "downloaded_media",
+        "images", "videos", "manuals", "cheats", "textures", "shaders", "covers", "snap", "snaps", "gamelists", "themes", "firmware"));
+    private static final java.util.regex.Pattern DISC = java.util.regex.Pattern.compile("(?i)\\s*\\((?:disc|disk|cd) ?(\\d+)[^)]*\\)");
+    private static final int MAX_GAMES = 3000;
+
+    /** Library title from a file name: "0627 - Moto GP (USA) (v1.02).iso" -> "Moto GP". */
+    static String cleanTitle(String name) {
+        return name.replaceFirst("\\.[^.]+$", "").replaceFirst("^\\d{3,5} - ", "").replaceAll("\\s*\\([^)]*\\)", "").replaceAll("\\s*\\[[^\\]]*\\]", "").trim();
+    }
+
+    /** The bracketed tags that tell versions apart: "(USA) (v1.02)". */
+    static String versionLabel(String name) {
+        java.util.regex.Matcher m = java.util.regex.Pattern.compile("\\([^)]*\\)|\\[[^\\]]*\\]").matcher(name.replaceFirst("\\.[^.]+$", ""));
+        StringBuilder sb = new StringBuilder();
+        while (m.find()) { if (DISC.matcher(m.group()).matches()) continue; if (sb.length() > 0) sb.append(' '); sb.append(m.group()); }
+        return sb.toString();
+    }
+
+    private void walk(Uri tree, String documentId, int depth, JSONArray out, int[] visited, Systems.System system, Map<String, JSONObject> known) throws Exception {
         if (depth > 8) throw new IOException("Folder exceeds scan limit");
-        if (visited[0] > 10000) throw new IOException("Folder exceeds scan limit");
+        if (visited[0] > 20000) throw new IOException("Folder exceeds scan limit");
+        List<String[]> files = new ArrayList<>();   // document id, name, size
         try (Cursor cursor = getContentResolver().query(DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId),
                 new String[] { "document_id", "_display_name", "mime_type", "_size" }, null, null, null)) {
             if (cursor == null) throw new IOException("No folder access");
@@ -710,33 +745,125 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
                     // A folder named after a console ("N64", "PS2", "snes") tags everything inside it.
                     Systems.System sub = Systems.forFolder(name);
-                    walk(tree, id, depth + 1, out, visited, sub == null ? system : sub);
+                    if (sub == null && SKIP_DIRS.contains(name.toLowerCase(Locale.ROOT))) continue;
+                    walk(tree, id, depth + 1, out, visited, sub == null ? system : sub, known);
                     continue;
                 }
-                String lower = name.toLowerCase(Locale.ROOT);
-                if (!system.accepts(lower)) continue;
-                if (out.length() >= 500) throw new IOException("More than 500 games");
-                Uri doc = DocumentsContract.buildDocumentUriUsingTree(tree, id);
-                String key = hash(doc.toString());
-                JSONObject known = findGame(key);
-                GameArt.Result art;
-                if (system != Systems.PSP) {
-                    art = new GameArt.Result();   // only PSP discs carry their own icon and title
-                } else if (known == null || (known.optString("icon").isEmpty() && known.optString("background").isEmpty()) || known.optString("discId").isEmpty()) {
-                    art = GameArt.extract(getContentResolver(), doc, artDir, key);   // also (re)reads DISC_ID for older entries
-                } else {
-                    art = new GameArt.Result();
-                    art.title = known.optString("title");
-                    art.discId = known.optString("discId");
-                    art.icon = known.optString("icon");
-                    art.background = known.optString("background");
-                }
-                String title = name.replaceFirst("\\.[^.]+$", "").replaceFirst("^\\d{3,5} - ", "").replaceAll("\\s*\\([^)]*\\)", "").replaceAll("\\s*\\[[^\\]]*\\]", "").trim();
-                if (!art.title.isEmpty()) title = art.title;
-                out.put(new JSONObject().put("id", key).put("uri", doc.toString()).put("title", title).put("filename", name)
-                    .put("discId", art.discId).put("icon", art.icon).put("background", art.background).put("system", system.id).put("size", cursor.isNull(3) ? 0 : cursor.getLong(3))
-                    .put("format", lower.substring(lower.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT)));
+                files.add(new String[] { id, name, cursor.isNull(3) ? "0" : cursor.getString(3) });
             }
+        }
+        // Files that are part of another entry: discs listed in a playlist, tracks of a cue sheet,
+        // and every disc after the first of a set that has no playlist.
+        HashSet<String> hidden = new HashSet<>();
+        Map<String, Integer> discCount = new HashMap<>();
+        Map<String, String[]> firstDisc = new HashMap<>();
+        for (String[] f : files) {
+            String lower = f[1].toLowerCase(Locale.ROOT);
+            if (lower.endsWith(".m3u") && system.accepts(lower)) {
+                try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(
+                        getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, f[0])), "UTF-8"))) {
+                    for (String line; (line = in.readLine()) != null; ) {
+                        line = line.trim();
+                        if (line.isEmpty() || line.startsWith("#")) continue;
+                        hidden.add(line.substring(Math.max(line.lastIndexOf('/'), line.lastIndexOf('\\')) + 1).toLowerCase(Locale.ROOT));
+                    }
+                } catch (Exception e) { Log.w("PocketDeck", "Playlist " + f[1], e); }
+            } else if (lower.endsWith(".cue") || lower.endsWith(".gdi")) {
+                String base = lower.substring(0, lower.length() - 4);
+                for (String[] g : files) {
+                    String other = g[1].toLowerCase(Locale.ROOT);
+                    if ((other.endsWith(".bin") || other.endsWith(".raw")) && other.startsWith(base)) hidden.add(other);
+                }
+            }
+        }
+        for (String[] f : files) {
+            String lower = f[1].toLowerCase(Locale.ROOT);
+            if (hidden.contains(lower) || !system.accepts(lower)) continue;
+            java.util.regex.Matcher m = DISC.matcher(f[1]);
+            if (!m.find()) continue;
+            String set = DISC.matcher(lower).replaceAll("");
+            int disc = Integer.parseInt(m.group(1));
+            discCount.put(set, discCount.containsKey(set) ? discCount.get(set) + 1 : 1);
+            String[] best = firstDisc.get(set);
+            if (best == null) { firstDisc.put(set, f); continue; }
+            java.util.regex.Matcher bm = DISC.matcher(best[1]);
+            bm.find();
+            if (disc < Integer.parseInt(bm.group(1))) { hidden.add(best[1].toLowerCase(Locale.ROOT)); firstDisc.put(set, f); }
+            else hidden.add(lower);
+        }
+        for (String[] f : files) {
+            String name = f[1], lower = name.toLowerCase(Locale.ROOT);
+            if (!system.accepts(lower) || hidden.contains(lower)) continue;
+            if (lower.contains("[bios]") || lower.contains("(bios)") || lower.startsWith("scph")) continue;
+            if (out.length() >= MAX_GAMES) throw new IOException("More than " + MAX_GAMES + " games");
+            Uri doc = DocumentsContract.buildDocumentUriUsingTree(tree, f[0]);
+            String key = hash(doc.toString());
+            JSONObject previous = known.get(key);
+            GameArt.Result art;
+            if (system != Systems.PSP) {
+                art = new GameArt.Result();   // only PSP discs carry their own icon and title
+            } else if (previous == null || (previous.optString("icon").isEmpty() && previous.optString("background").isEmpty()) || previous.optString("discId").isEmpty()) {
+                art = GameArt.extract(getContentResolver(), doc, artDir, key);   // also (re)reads DISC_ID for older entries
+            } else {
+                art = new GameArt.Result();
+                art.title = previous.optString("title");
+                art.discId = previous.optString("discId");
+                art.icon = previous.optString("icon");
+                art.background = previous.optString("background");
+            }
+            String title = cleanTitle(name);
+            if (!art.title.isEmpty()) title = art.title;
+            String set = DISC.matcher(lower).replaceAll("");
+            JSONObject entry = new JSONObject().put("id", key).put("uri", doc.toString()).put("title", title).put("filename", name)
+                .put("discId", art.discId).put("icon", art.icon).put("background", art.background).put("system", system.id)
+                .put("size", Long.parseLong(f[2])).put("format", lower.substring(lower.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT))
+                .put("group", system.id + "|" + title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", ""))
+                .put("version", versionLabel(name));
+            if (discCount.containsKey(set) && discCount.get(set) > 1) entry.put("discs", discCount.get(set));
+            out.put(entry);
+        }
+    }
+
+    /** Lower is preferred when several versions of a game share a title. */
+    private static int regionRank(String label) {
+        String l = label.toLowerCase(Locale.ROOT);
+        if (l.contains("usa") || l.contains("(u)")) return 0;
+        if (l.contains("world")) return 1;
+        if (l.contains("europe") || l.contains("(e)")) return 2;
+        if (l.contains("japan") || l.contains("(j)")) return 4;
+        return 3;
+    }
+
+    /**
+     * Folds versions of the same game into one entry: the version the user picked, else the
+     * best region. Others are marked alt (kept for launching and the version chooser).
+     */
+    private void foldVersions(JSONArray games) throws Exception {
+        Map<String, List<JSONObject>> groups = new HashMap<>();
+        for (int i = 0; i < games.length(); i++) {
+            JSONObject g = games.getJSONObject(i);
+            String group = g.optString("group");
+            if (group.isEmpty()) continue;
+            if (!groups.containsKey(group)) groups.put(group, new ArrayList<>());
+            groups.get(group).add(g);
+        }
+        for (Map.Entry<String, List<JSONObject>> e : groups.entrySet()) {
+            List<JSONObject> members = e.getValue();
+            if (members.size() < 2) continue;
+            String picked = prefs.getString("version." + e.getKey(), "");
+            JSONObject primary = null;
+            for (JSONObject g : members) if (g.optString("id").equals(picked)) primary = g;
+            if (primary == null) {
+                for (JSONObject g : members) {
+                    if (primary == null || regionRank(g.optString("version")) < regionRank(primary.optString("version"))) primary = g;
+                }
+            }
+            JSONArray versions = new JSONArray();
+            for (JSONObject g : members) {
+                versions.put(new JSONObject().put("id", g.optString("id")).put("label", g.optString("version").isEmpty() ? g.optString("filename") : g.optString("version")));
+                if (g != primary) g.put("alt", true);
+            }
+            primary.put("versions", versions);
         }
     }
 
@@ -876,6 +1003,18 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         @JavascriptInterface public void favorite(String id) {
             if (!id.startsWith("app:") && findGame(id) == null) return;
             prefs.edit().putBoolean("favorite." + id, !prefs.getBoolean("favorite." + id, false)).apply();
+            sendState();
+        }
+        @JavascriptInterface public void hide(String id, boolean hidden) {
+            if (findGame(id) == null) return;
+            if (hidden) prefs.edit().putBoolean("hidden." + id, true).apply(); else prefs.edit().remove("hidden." + id).apply();
+            sendState();
+        }
+        /** Which version of a game (region, revision) its library entry plays. */
+        @JavascriptInterface public void setVersion(String id) {
+            JSONObject g = findGame(id);
+            if (g == null || g.optString("group").isEmpty()) return;
+            prefs.edit().putString("version." + g.optString("group"), id).apply();
             sendState();
         }
         @JavascriptInterface public void fpsPatch(String id, boolean on) {

@@ -435,6 +435,7 @@ button.row:active { background: var(--surface-2); }
   position: fixed; z-index: 15;
   display: flex; flex-direction: column;
   min-width: 200px; padding: 4px;
+  max-height: calc(100dvh - 24px); overflow-y: auto;
   background: var(--surface-2);
   border: 1px solid var(--line);
   border-radius: var(--radius);
