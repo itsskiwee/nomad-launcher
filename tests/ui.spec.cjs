@@ -152,3 +152,43 @@ test('battery power, charge estimates, full, unplugged and unavailable states', 
   await expect(page.locator('#batteryHint')).toContainText('Learning');
   expect(errors).toEqual([]);
 });
+
+test('controller input moves focus, opens menus, favorites and goes back', async ({ page }) => {
+  const errors = await openApp(page);
+  // Home: left/right move the selected cover, A plays it.
+  const first = await page.evaluate(() => current().id);
+  await page.evaluate(() => deckInput('right'));
+  expect(await page.evaluate(() => current().id)).not.toBe(first);
+  await page.evaluate(() => deckInput('a'));
+  expect(await page.evaluate(() => window.calls.at(-1)[0])).toBe('play');
+  // R1 goes to the library with the first game focused; directions move between tiles.
+  await page.evaluate(() => deckInput('r1'));
+  await expect(page.locator('#library')).toHaveClass(/active/);
+  const focused = () => page.evaluate(() => document.activeElement.closest('[data-id]')?.dataset.id);
+  const start = await focused();
+  expect(start).toBeTruthy();
+  await page.evaluate(() => deckInput('right'));
+  const next = await focused();
+  expect(next).not.toBe(start);
+  // X opens the game menu with its first entry focused; B closes it and restores the tile.
+  await page.evaluate(() => deckInput('x'));
+  await expect(page.locator('#gameMenu')).toBeVisible();
+  expect(await page.evaluate(() => document.activeElement.id)).toBe('menuPlay');
+  await page.evaluate(() => deckInput('b'));
+  await expect(page.locator('#gameMenu')).toBeHidden();
+  expect(await focused()).toBe(next);
+  // Y favorites the focused game; Select opens Settings and L1/R1 step through its sections.
+  const before = await page.evaluate(id => window.fixture.games.find(g => g.id === id).favorite, next);
+  await page.evaluate(() => deckInput('y'));
+  expect(await page.evaluate(id => window.fixture.games.find(g => g.id === id).favorite, next)).toBe(!before);
+  await page.evaluate(() => deckInput('select'));
+  await expect(page.locator('#settings')).toHaveClass(/active/);
+  await page.evaluate(() => deckInput('r1'));
+  expect(await page.evaluate(() => section)).toBe('artwork');
+  await page.evaluate(() => { deckInput('l1'); deckInput('right'); });
+  expect(await page.evaluate(() => !!document.activeElement.closest('.settings-pane'))).toBe(true);
+  // Keyboard arrows drive the same navigation.
+  await page.keyboard.press('Escape');
+  await expect(page.locator('#home')).toHaveClass(/active/);
+  expect(errors).toEqual([]);
+});

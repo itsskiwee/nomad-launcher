@@ -26,6 +26,9 @@ import android.os.ParcelFileDescriptor;
 import android.provider.DocumentsContract;
 import android.provider.Settings;
 import android.util.Log;
+import android.view.InputDevice;
+import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.webkit.JavascriptInterface;
@@ -141,7 +144,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             getWindow().setAttributes(attributes);
         }
 
-        web = new WebView(this);
+        // Controller keys are taken before the IME stage: after a touch, Android would otherwise spend
+        // the first D-pad press leaving touch mode and moving the WebView's own focus.
+        web = new WebView(this) {
+            @Override public boolean dispatchKeyEventPreIme(KeyEvent event) {
+                return handlePadKey(event) || super.dispatchKeyEventPreIme(event);
+            }
+        };
         // Stays black until the page reveals itself; the page paints its own background after that.
         web.setBackgroundColor(Color.BLACK);
         setContentView(web);
@@ -321,6 +330,80 @@ public class MainActivity extends Activity implements MediaHub.Listener {
 
     private void immersive() {
         getWindow().getDecorView().setSystemUiVisibility(5894);
+    }
+
+    // ---- controller ----
+    // Gamepad buttons, the D-pad and the sticks become named inputs for the page (window.deckInput).
+    // Keyboards are left alone so the search field keeps working; the page maps arrow keys itself.
+
+    private String stickDirection;
+    private final Runnable stickRepeat = new Runnable() {
+        @Override public void run() {
+            if (stickDirection == null) return;
+            sendInput(stickDirection, 1);
+            timer.postDelayed(this, 120);
+        }
+    };
+
+    private static boolean fromPad(int source) {
+        return (source & InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD
+            || (source & InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK
+            || (source & InputDevice.SOURCE_DPAD) == InputDevice.SOURCE_DPAD;
+    }
+
+    static String padButton(int keyCode, boolean pad) {
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_BUTTON_A: return "a";
+            case KeyEvent.KEYCODE_BUTTON_B: return "b";
+            case KeyEvent.KEYCODE_BUTTON_X: return "x";
+            case KeyEvent.KEYCODE_BUTTON_Y: return "y";
+            case KeyEvent.KEYCODE_BUTTON_L1: return "l1";
+            case KeyEvent.KEYCODE_BUTTON_R1: return "r1";
+            case KeyEvent.KEYCODE_BUTTON_L2: return "l1";
+            case KeyEvent.KEYCODE_BUTTON_R2: return "r1";
+            case KeyEvent.KEYCODE_BUTTON_START: return "start";
+            case KeyEvent.KEYCODE_BUTTON_SELECT: return "select";
+            case KeyEvent.KEYCODE_DPAD_UP: return pad ? "up" : null;
+            case KeyEvent.KEYCODE_DPAD_DOWN: return pad ? "down" : null;
+            case KeyEvent.KEYCODE_DPAD_LEFT: return pad ? "left" : null;
+            case KeyEvent.KEYCODE_DPAD_RIGHT: return pad ? "right" : null;
+            case KeyEvent.KEYCODE_DPAD_CENTER: return pad ? "a" : null;
+            default: return null;
+        }
+    }
+
+    private void sendInput(String button, int repeat) {
+        if (!webGone) web.evaluateJavascript("window.deckInput && window.deckInput('" + button + "', " + repeat + ")", null);
+    }
+
+    private boolean handlePadKey(KeyEvent event) {
+        String button = padButton(event.getKeyCode(), fromPad(event.getSource()));
+        if (button == null) return false;
+        if (event.getAction() == KeyEvent.ACTION_DOWN) sendInput(button, event.getRepeatCount());
+        return true;
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        return handlePadKey(event) || super.dispatchKeyEvent(event);
+    }
+
+    /** Left stick and hat switches (many pads report the D-pad as a hat) with key-like repeat. */
+    @Override
+    public boolean dispatchGenericMotionEvent(MotionEvent event) {
+        if ((event.getSource() & InputDevice.SOURCE_JOYSTICK) != InputDevice.SOURCE_JOYSTICK || event.getAction() != MotionEvent.ACTION_MOVE) {
+            return super.dispatchGenericMotionEvent(event);
+        }
+        float x = event.getAxisValue(MotionEvent.AXIS_HAT_X), y = event.getAxisValue(MotionEvent.AXIS_HAT_Y);
+        if (Math.abs(x) < .5f && Math.abs(y) < .5f) { x = event.getAxisValue(MotionEvent.AXIS_X); y = event.getAxisValue(MotionEvent.AXIS_Y); }
+        String dir = Math.max(Math.abs(x), Math.abs(y)) < .5f ? null
+            : Math.abs(x) > Math.abs(y) ? (x > 0 ? "right" : "left") : (y > 0 ? "down" : "up");
+        if (dir == null ? stickDirection != null : !dir.equals(stickDirection)) {
+            stickDirection = dir;
+            timer.removeCallbacks(stickRepeat);
+            if (dir != null) { sendInput(dir, 0); timer.postDelayed(stickRepeat, 380); }
+        }
+        return true;
     }
 
     @Override

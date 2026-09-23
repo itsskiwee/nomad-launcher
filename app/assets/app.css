@@ -36,6 +36,13 @@ button, input { font: inherit; }
 button { color: inherit; border: 0; background: none; padding: 0; cursor: pointer; }
 button:disabled { opacity: .4; pointer-events: none; }
 button:focus-visible, input:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+/* Controller focus: the same white ring, shown whenever a pad is driving the interface. */
+body.pad button:focus, body.pad input:focus, body.pad [tabindex="0"]:focus { outline: 2px solid #fff; outline-offset: 2px; }
+body.pad .game-tile-play:focus { outline: none; }
+body.pad .game-tile.selected .cover { outline: none; }
+body.pad .game-tile-play:focus .cover { outline: 2px solid rgba(255, 255, 255, .92); outline-offset: 2px; }
+body.pad .game-tile-play:focus .game-title { color: var(--text); }
+body:not(.pad) :focus:not(:focus-visible) { outline: none; }
 svg { width: 20px; height: 20px; display: block; flex-shrink: 0; }
 [hidden] { display: none !important; }
 h1, h2, h3, p { margin: 0; }

@@ -463,7 +463,6 @@ function renderHome() {
     // First tap selects, second tap plays.
     el.onclick = () => { if (selected === g.id) playGame(g.id); else { selected = g.id; renderHome(); } };
     el.tabIndex = 0;
-    el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); el.click(); } };
     el.addEventListener("contextmenu", e => e.preventDefault());
     row.append(el);
   });
@@ -500,6 +499,7 @@ function empty(title, description, action = false) {
 function gameTile(g) {
   const el = document.createElement('div');
   el.className = 'game-tile' + (selected === g.id ? ' selected' : '');
+  el.dataset.id = g.id;
   el.addEventListener('contextmenu', e => e.preventDefault());
   const play = document.createElement('button');
   play.className = 'game-tile-play';
@@ -531,6 +531,7 @@ function renderHomeFavorites() {
   games.forEach(g => grid.append(gameTile(g)));
   if (!games.length) grid.append(empty('No favorites yet', 'Open a game’s ⋯ menu and choose Add to favorites.'));
   grid.scrollTop = scroll;
+  restorePadFocus(grid);
 }
 function showHomePanel(index) {
   closeGameMenu();
@@ -553,11 +554,6 @@ $('homeFavorites').addEventListener('touchend', e => {
 }, { passive: true });
 $('homeFavorites').addEventListener('touchcancel', () => { favoritesSwipe = null; }, { passive: true });
 $('homePages').addEventListener('scroll', closeGameMenu, { passive: true });
-$('homePages').addEventListener('keydown', e => {
-  if (e.target !== $('homePages')) return;
-  if (e.key === 'ArrowDown' || e.key === 'PageDown') { e.preventDefault(); showHomePanel(1); }
-  if (e.key === 'ArrowUp' || e.key === 'PageUp') { e.preventDefault(); showHomePanel(0); }
-});
 
 // ---- library ----
 function renderLibrary() {
@@ -576,6 +572,7 @@ function renderLibrary() {
       : empty('Add your games', 'Choose the folder that holds your games.', true));
   }
   grid.scrollTop = scroll;
+  restorePadFocus(grid);
 }
 
 function renderApps() {
@@ -1110,6 +1107,185 @@ $('applyPerformance').onclick = () => requestPerformance(selectedMode);
 $('retryPerformance').onclick = () => requestPerformance();
 document.querySelectorAll('[data-mode]').forEach(button => button.onclick = () => previewPerformance(button.dataset.mode));
 previewPerformance('balanced');
+
+// ---- controller ----
+// Native forwards gamepad buttons, the D-pad and the sticks as window.deckInput(name). Focus moves
+// spatially between whatever is on screen; Home's cover row moves the selection instead of focus.
+// A plays or presses, B goes back, X/Start opens a game's menu, Y favorites, L1/R1 switch pages
+// (settings sections inside Settings), Select opens Settings. Touch hides the focus ring again.
+let padMode = false, padReturn = null, padFocusId = '';
+const PAGES = ['home', 'library', 'apps'];
+function setPad(on) {
+  if (padMode === on) return;
+  padMode = on;
+  document.body.classList.toggle('pad', on);
+}
+document.addEventListener('pointerdown', () => setPad(false), true);
+
+function isVisible(el) {
+  if (!el || el.disabled || el.closest('[hidden]')) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < window.innerHeight + 400;
+}
+function padTargets(scope) {
+  return [...scope.querySelectorAll('button, input, [tabindex="0"]')]
+    .filter(el => !el.classList.contains('game-tile-actions') && !(el.closest('#coverRow')) && isVisible(el));
+}
+function focusEl(el) {
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  // Scroll only the list holding the target; scrollIntoView would also shift the fixed-height shell.
+  const box = el.closest('.library-grid, .apps-grid, .settings-pane, .settings-nav, .menu');
+  if (box) {
+    const r = el.getBoundingClientRect(), b = box.getBoundingClientRect();
+    if (r.top < b.top + 8) box.scrollTop -= b.top + 8 - r.top;
+    else if (r.bottom > b.bottom - 8) box.scrollTop += r.bottom - b.bottom + 8;
+  }
+  const tile = el.closest('[data-id]');
+  padFocusId = tile ? tile.dataset.id : '';
+  if (el.closest('.settings-nav') && el.dataset.section !== section) showSection(el.dataset.section);
+}
+function focusFirst(scope) { if (padMode) focusEl(padTargets(scope)[0]); }
+// A re-render replaces the grid; put the focus back on the same game.
+function restorePadFocus(grid) {
+  if (!padMode || !padFocusId || !grid.closest('.page.active')) return;
+  const tile = grid.querySelector(`[data-id="${CSS.escape(padFocusId)}"] .game-tile-play`);
+  if (tile && document.activeElement !== tile) tile.focus({ preventScroll: true });
+}
+const openMenuEl = () => !$('chooser').hidden ? $('chooser') : !$('gameMenu').hidden ? $('gameMenu') : null;
+
+// The nearest target in a direction. Targets sharing the current row (or column) win over
+// closer ones that are not in line, so "right" from the settings list goes into its rows.
+function nearest(from, dir, list) {
+  const a = from.getBoundingClientRect(), ax = a.left + a.width / 2, ay = a.top + a.height / 2;
+  const horizontal = dir === 'left' || dir === 'right';
+  let best = null, bestScore = Infinity;
+  for (const el of list) {
+    if (el === from || el.contains(from) || from.contains(el)) continue;
+    const b = el.getBoundingClientRect(), bx = b.left + b.width / 2, by = b.top + b.height / 2;
+    const dx = bx - ax, dy = by - ay;
+    let along, across;
+    if (dir === 'up') { if (b.bottom > a.top + 4 && dy > -8) continue; along = -dy; across = Math.abs(dx); }
+    else if (dir === 'down') { if (b.top < a.bottom - 4 && dy < 8) continue; along = dy; across = Math.abs(dx); }
+    else if (dir === 'left') { if (b.right > a.left + 4 && dx > -8) continue; along = -dx; across = Math.abs(dy); }
+    else { if (b.left < a.right - 4 && dx < 8) continue; along = dx; across = Math.abs(dy); }
+    const overlaps = horizontal ? b.top < a.bottom && b.bottom > a.top : b.left < a.right && b.right > a.left;
+    const score = (overlaps ? 0 : 100000) + along + across * 2.5;
+    if (score < bestScore) { bestScore = score; best = el; }
+  }
+  return best;
+}
+function entryPoint() {
+  const last = padFocusId && $(page) && $(page).querySelector(`[data-id="${CSS.escape(padFocusId)}"] .game-tile-play`);
+  if (last && isVisible(last)) return last;
+  if (page === 'library') return $('libraryGrid').querySelector('.game-tile-play') || padTargets($('library'))[0];
+  if (page === 'apps') return $('appsGrid').querySelector('button');
+  if (page === 'settings') return document.querySelector('.settings-nav button.active');
+  return $('homeFavorites').querySelector('.game-tile-play');
+}
+function homePanel() { const p = $('homePages'); return Math.round(p.scrollTop / Math.max(1, p.clientHeight)); }
+
+function menuInput(menu, btn) {
+  const items = padTargets(menu);
+  let i = items.indexOf(document.activeElement);
+  if (btn === 'up' || btn === 'down') focusEl(items[i < 0 ? 0 : (i + (btn === 'down' ? 1 : -1) + items.length) % items.length]);
+  else if (btn === 'a') { menuOpenedAt = 0; (items[i] || items[0]).click(); }
+  else if (btn === 'b') window.deckBack();
+  if (!openMenuEl()) { if (isVisible(padReturn)) focusEl(padReturn); else padReturn = null; }
+  else if (!menu.contains(document.activeElement)) focusFirst(openMenuEl());
+}
+function openMenuFor(game, anchor) {
+  if (!game) return;
+  padReturn = document.activeElement;
+  const r = anchor.getBoundingClientRect();
+  openGameMenu(game, r.left, r.bottom);
+  menuOpenedAt = 0;
+  focusFirst($('gameMenu'));
+}
+function homeInput(btn) {
+  const header = document.querySelector('header');
+  if (header.contains(document.activeElement)) {
+    if (btn !== 'down') return false;
+    document.activeElement.blur();
+    return true;
+  }
+  if (homePanel() === 1) {
+    if (btn === 'up' && !(document.activeElement && $('homeFavorites').contains(document.activeElement) && nearest(document.activeElement, 'up', padTargets($('homeFavorites'))))) {
+      showHomePanel(0); document.activeElement && document.activeElement.blur(); return true;
+    }
+    return false;
+  }
+  const games = homeGames().sort(byPlayed).slice(0, $('coverRow').querySelectorAll('.cover').length);
+  const i = games.findIndex(g => g.id === selected), game = current();
+  switch (btn) {
+    case 'left': case 'right': {
+      const next = games[i + (btn === 'right' ? 1 : -1)];
+      if (next) { selected = next.id; renderHome(); }
+      return true;
+    }
+    case 'a': if (game) playGame(game.id); return true;
+    case 'x': case 'start': openMenuFor(game, $('artButton')); return true;
+    case 'y': if (game) native('favorite', game.id); return true;
+    case 'down': showHomePanel(1); setTimeout(() => focusFirst($('homeFavorites')), 400); return true;
+    case 'up': focusEl(document.querySelector('nav button.active')); return true;
+  }
+  return false;
+}
+window.deckInput = btn => {
+  // Focus left behind by touch is not a controller position; start fresh.
+  if (!padMode && !openMenuEl() && document.activeElement && document.activeElement !== $('search')) document.activeElement.blur();
+  setPad(true);
+  const menu = openMenuEl();
+  if (menu) return menuInput(menu, btn);
+  if (btn === 'l1' || btn === 'r1') {
+    const step = btn === 'r1' ? 1 : -1;
+    if (page === 'settings') {
+      const names = [...document.querySelectorAll('.settings-nav button')].map(b => b.dataset.section);
+      showSection(names[(names.indexOf(section) + step + names.length) % names.length]);
+      focusEl(document.querySelector('.settings-nav button.active'));
+    } else {
+      goPage(PAGES[(Math.max(0, PAGES.indexOf(page)) + step + PAGES.length) % PAGES.length]);
+      if (page !== 'home') focusEl(entryPoint());
+    }
+    return;
+  }
+  if (btn === 'select') { goPage(page === 'settings' ? 'home' : 'settings'); if (page === 'settings') focusEl(entryPoint()); return; }
+  if (btn === 'b') {
+    if (document.activeElement === $('search')) { $('search').blur(); focusEl(entryPoint()); return; }
+    window.deckBack();
+    if (page !== 'home' && !document.querySelector('.page.active').contains(document.activeElement)) focusEl(entryPoint());
+    return;
+  }
+  if (page === 'home' && homeInput(btn)) return;
+  const el = document.activeElement;
+  const scopes = [document.querySelector('header'), $(page)];
+  const inScope = el && el !== document.body && scopes.some(s => s.contains(el)) && isVisible(el);
+  if (['up', 'down', 'left', 'right'].includes(btn)) {
+    if (!inScope) return focusEl(entryPoint());
+    // The header and the page are separate zones: sideways moves stay in their zone, and up/down
+    // cross over only when nothing is left in that direction.
+    const zone = scopes.find(s => s.contains(el)), other = scopes.find(s => s !== zone);
+    let next = nearest(el, btn, padTargets(zone));
+    if (!next && (btn === 'up' || btn === 'down')) next = btn === 'down' && zone === scopes[0] ? entryPoint() : nearest(el, btn, padTargets(other));
+    if (next) focusEl(next);
+    return;
+  }
+  if (!inScope) return focusEl(entryPoint());
+  const tile = el.closest('.game-tile');
+  const game = tile && allGames().find(g => g.id === tile.dataset.id);
+  if (btn === 'a') { el.click(); return; }
+  if ((btn === 'x' || btn === 'start') && game) openMenuFor(game, tile);
+  if (btn === 'y' && game) native('favorite', game.id);
+};
+// A keyboard drives the same inputs; typing in the search field stays untouched.
+document.addEventListener('keydown', e => {
+  const typing = e.target.tagName === 'INPUT';
+  const map = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', Enter: 'a', Escape: 'b' };
+  const btn = map[e.key];
+  if (!btn || typing && !['up', 'down', 'b'].includes(btn)) return;
+  e.preventDefault(); e.stopPropagation();
+  window.deckInput(btn);
+}, true);
 
 // ---- boot ----
 // Reveal only a populated native snapshot and decoded first-screen assets, once per page.
