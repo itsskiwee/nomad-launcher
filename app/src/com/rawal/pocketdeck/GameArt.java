@@ -10,7 +10,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
@@ -49,14 +48,15 @@ final class GameArt {
         return byteBufferAllocate.array();
     }
 
-    static long u32(byte[] bArr, int i) {
-        return ((long) ByteBuffer.wrap(bArr, i, 4).order(ByteOrder.LITTLE_ENDIAN).getInt()) & 4294967295L;
+    static long u32(byte[] data, int offset) {
+        return (data[offset] & 255L) | ((data[offset + 1] & 255L) << 8)
+                | ((data[offset + 2] & 255L) << 16) | ((data[offset + 3] & 255L) << 24);
     }
 
     static Map<String, long[]> directory(FileChannel fileChannel, long j, int i) throws IOException {
         int i2;
         byte[] bArr = read(fileChannel, j * 2048, Math.min(i, 2097152));
-        HashMap map = new HashMap();
+        Map<String, long[]> map = new HashMap<>();
         int i3 = 0;
         while (i3 < bArr.length) {
             int i4 = bArr[i3] & 255;
@@ -81,44 +81,25 @@ final class GameArt {
     /** PPSSPP names its per-game files after DISC_ID ("ULUS10336"). */
     static String discId(byte[] bArr) { return sfoString(bArr, "DISC_ID"); }
 
-    static String sfoString(byte[] bArr, String key) {
-        try {
-            int i = 20;
-            if (bArr.length >= 20) {
-                int i2 = 0;
-                if (bArr[0] == 0 && bArr[1] == 80 && bArr[2] == 83 && bArr[3] == 70) {
-                    int i3 = 8;
-                    long jU32 = u32(bArr, 8);
-                    long jU33 = u32(bArr, 12);
-                    long jU34 = u32(bArr, 16);
-                    while (i2 < Math.min(jU34, 512L)) {
-                        int i4 = (i2 * 16) + i;
-                        if (i4 + 16 > bArr.length) {
-                            break;
-                        }
-                        int i5 = ((int) jU32) + ((bArr[i4] & 255) | ((bArr[i4 + 1] & 255) << i3));
-                        int i6 = i5;
-                        while (i6 < bArr.length && bArr[i6] != 0) {
-                            i6++;
-                        }
-                        if (i5 >= 0 && i5 < bArr.length && new String(bArr, i5, i6 - i5, "UTF-8").equals(key)) {
-                            long jU35 = u32(bArr, i4 + 12) + jU33;
-                            long jU36 = u32(bArr, i4 + 4);
-                            if (jU35 >= 0 && jU36 > 0) {
-                                if (jU35 + jU36 <= bArr.length) {
-                                    return new String(bArr, (int) jU35, (int) jU36, "UTF-8").replace("\u0000", "").trim();
-                                }
-                            }
-                        }
-                        i2++;
-                    }
-                    return "";
-                }
-            }
-            return "";
-        } catch (Exception e) {
-            return "";
+    static String sfoString(byte[] data, String key) {
+        if (data.length < 20 || data[0] != 0 || data[1] != 'P'
+                || data[2] != 'S' || data[3] != 'F') return "";
+        long keys = u32(data, 8), values = u32(data, 12);
+        int count = (int) Math.min(u32(data, 16), Math.min(512, (data.length - 20) / 16));
+        byte[] wanted = key.getBytes(StandardCharsets.UTF_8);
+        for (int i = 0; i < count; i++) {
+            int entry = 20 + i * 16;
+            long name = keys + ((data[entry] & 255) | ((data[entry + 1] & 255) << 8));
+            if (name + wanted.length >= data.length) continue;
+            int start = (int) name, matched = 0;
+            while (matched < wanted.length && data[start + matched] == wanted[matched]) matched++;
+            if (matched != wanted.length || data[start + matched] != 0) continue;
+            long value = values + u32(data, entry + 12), length = u32(data, entry + 4);
+            if (length == 0 || value + length > data.length) return "";
+            return new String(data, (int) value, (int) length, StandardCharsets.UTF_8)
+                    .replace("\u0000", "").trim();
         }
+        return "";
     }
 
     static String image(byte[] bArr, File file, String str) throws IOException {
@@ -134,151 +115,60 @@ final class GameArt {
         if (bitmapDecodeByteArray == null) {
             return "";
         }
-        try {
-            FileOutputStream fileOutputStream = new FileOutputStream(new File(file, str));
-            try {
-                bitmapDecodeByteArray.compress(Bitmap.CompressFormat.JPEG, 90, fileOutputStream);
-                fileOutputStream.close();
-                bitmapDecodeByteArray.recycle();
-                return str;
-            } catch (Throwable th) {
-                try {
-                    fileOutputStream.close();
-                } catch (Throwable th2) {
-                    th.addSuppressed(th2);
-                }
-                throw th;
-            }
-        } catch (Throwable th3) {
+        try (FileOutputStream output = new FileOutputStream(new File(file, str))) {
+            bitmapDecodeByteArray.compress(Bitmap.CompressFormat.JPEG, 90, output);
+            return str;
+        } finally {
             bitmapDecodeByteArray.recycle();
-            throw th3;
         }
     }
 
-    static Result extract(ContentResolver contentResolver, Uri uri, File file, String str) {
-        String str2;
-        String str3;
-        String str4;
-        File file2;
-        String str5;
-        byte[] bArr;
-        String str6;
+    static Result extract(ContentResolver resolver, Uri uri, File outputDir, String key) {
         Result result = new Result();
         try {
-            ParcelFileDescriptor parcelFileDescriptorOpenFileDescriptor = contentResolver.openFileDescriptor(uri, "r");
-            try {
-                ParcelFileDescriptor.AutoCloseInputStream autoCloseInputStream = new ParcelFileDescriptor.AutoCloseInputStream(parcelFileDescriptorOpenFileDescriptor);
-                try {
-                    FileChannel channel = autoCloseInputStream.getChannel();
-                    byte[] bArr2 = read(channel, 0L, 40);
-                    HashMap map = new HashMap();
-                    String str7 = "PIC1.PNG";
-                    String str8 = "ICON0.PNG";
-                    String str9 = "PARAM.SFO";
-                    if (bArr2[0] == 0 && bArr2[1] == 80 && bArr2[2] == 66 && bArr2[3] == 80) {
-                        String[] strArr = {"PARAM.SFO", "ICON0.PNG", "ICON1.PMF", "PIC0.PNG", "PIC1.PNG"};
-                        int[] iArr = {0, 1, 4};
-                        int i = 0;
-                        for (int i2 = 3; i < i2; i2 = 3) {
-                            int i3 = iArr[i];
-                            int i4 = i3 * 4;
-                            long jU32 = u32(bArr2, i4 + 8);
-                            long jU33 = u32(bArr2, i4 + 12);
-                            if (jU33 > jU32) {
-                                bArr = bArr2;
-                                str6 = str8;
-                                long j = jU33 - jU32;
-                                if (j < 8388608) {
-                                    map.put(strArr[i3], read(channel, jU32, (int) j));
-                                }
-                            } else {
-                                bArr = bArr2;
-                                str6 = str8;
-                            }
-                            i++;
-                            bArr2 = bArr;
-                            str8 = str6;
-                        }
-                        str3 = "PARAM.SFO";
-                        str4 = "PIC1.PNG";
-                        str2 = str8;
-                    } else {
-                        byte[] bArr3 = read(channel, 32768L, 2048);
-                        if (!new String(bArr3, 1, 5, "US-ASCII").equals("CD001")) {
-                            autoCloseInputStream.close();
-                            if (parcelFileDescriptorOpenFileDescriptor != null) {
-                                parcelFileDescriptorOpenFileDescriptor.close();
-                            }
-                            return result;
-                        }
-                        long[] jArr = directory(channel, u32(bArr3, 158), (int) u32(bArr3, 166)).get("PSP_GAME");
-                        if (jArr == null) {
-                            autoCloseInputStream.close();
-                            if (parcelFileDescriptorOpenFileDescriptor != null) {
-                                parcelFileDescriptorOpenFileDescriptor.close();
-                            }
-                            return result;
-                        }
-                        Map<String, long[]> mapDirectory = directory(channel, jArr[0], (int) jArr[1]);
-                        str2 = "ICON0.PNG";
-                        String[] strArr2 = {"PARAM.SFO", str2, "PIC1.PNG"};
-                        int i5 = 0;
-                        while (i5 < 3) {
-                            String str10 = strArr2[i5];
-                            long[] jArr2 = mapDirectory.get(str10);
-                            if (jArr2 != null && jArr2[1] > 0 && jArr2[1] < 8388608) {
-                                map.put(str10, read(channel, jArr2[0] * 2048, (int) jArr2[1]));
-                            }
-                            i5++;
-                            str7 = str7;
-                            str9 = str9;
-                        }
-                        str3 = str9;
-                        str4 = str7;
+            ParcelFileDescriptor descriptor = resolver.openFileDescriptor(uri, "r");
+            if (descriptor == null) return result;
+            // AutoCloseInputStream owns the descriptor, including on early returns.
+            try (ParcelFileDescriptor.AutoCloseInputStream input =
+                         new ParcelFileDescriptor.AutoCloseInputStream(descriptor)) {
+                FileChannel channel = input.getChannel();
+                byte[] header = read(channel, 0, 40);
+                String[] names = {"PARAM.SFO", "ICON0.PNG", "PIC1.PNG"};
+                Map<String, long[]> entries;
+                boolean pbp = header[0] == 0 && header[1] == 'P'
+                        && header[2] == 'B' && header[3] == 'P';
+                if (pbp) {
+                    entries = new HashMap<>();
+                    int[] indices = {0, 1, 4};
+                    for (int i = 0; i < indices.length; i++) {
+                        int offset = 8 + indices[i] * 4;
+                        long start = u32(header, offset);
+                        entries.put(names[i], new long[]{start, u32(header, offset + 4) - start});
                     }
-                    String str11 = str3;
-                    if (map.containsKey(str11)) {
-                        result.title = title((byte[]) map.get(str11));
-                        result.discId = discId((byte[]) map.get(str11));
-                    }
-                    if (map.containsKey(str2)) {
-                        str5 = str;
-                        file2 = file;
-                        result.icon = image((byte[]) map.get(str2), file2, str5 + "-icon.jpg");
-                    } else {
-                        file2 = file;
-                        str5 = str;
-                    }
-                    String str12 = str4;
-                    if (map.containsKey(str12)) {
-                        result.background = image((byte[]) map.get(str12), file2, str5 + "-bg.jpg");
-                    }
-                    autoCloseInputStream.close();
-                    if (parcelFileDescriptorOpenFileDescriptor != null) {
-                        parcelFileDescriptorOpenFileDescriptor.close();
-                    }
-                } catch (Throwable th) {
-                    try {
-                        autoCloseInputStream.close();
-                        throw th;
-                    } catch (Throwable th2) {
-                        th.addSuppressed(th2);
-                        throw th;
-                    }
+                } else {
+                    byte[] volume = read(channel, 32768, 2048);
+                    if (!new String(volume, 1, 5, StandardCharsets.US_ASCII).equals("CD001")) return result;
+                    long[] game = directory(channel, u32(volume, 158), (int) u32(volume, 166)).get("PSP_GAME");
+                    if (game == null) return result;
+                    entries = directory(channel, game[0], (int) game[1]);
                 }
-            } catch (Throwable th3) {
-                if (parcelFileDescriptorOpenFileDescriptor == null) {
-                    throw th3;
-                }
-                try {
-                    parcelFileDescriptorOpenFileDescriptor.close();
-                    throw th3;
-                } catch (Throwable th4) {
-                    th3.addSuppressed(th4);
-                    throw th3;
+                // Keep only one asset's compressed bytes alive at a time.
+                for (String name : names) {
+                    long[] entry = entries.get(name);
+                    if (entry == null || entry[1] <= 0 || entry[1] >= 8388608) continue;
+                    byte[] data = read(channel, entry[0] * (pbp ? 1 : 2048), (int) entry[1]);
+                    if (name.equals("PARAM.SFO")) {
+                        result.title = title(data);
+                        result.discId = discId(data);
+                    } else if (name.equals("ICON0.PNG")) {
+                        result.icon = image(data, outputDir, key + "-icon.jpg");
+                    } else {
+                        result.background = image(data, outputDir, key + "-bg.jpg");
+                    }
                 }
             }
-        } catch (Exception e) {
+        } catch (Exception ignored) {
+            // Missing or malformed embedded artwork must not prevent importing a game.
         }
         return result;
     }

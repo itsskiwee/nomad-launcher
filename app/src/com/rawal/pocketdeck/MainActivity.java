@@ -417,13 +417,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 JSONArray games = games();
                 for (int i = 0; i < games.length(); i++) {
                     JSONObject g = games.getJSONObject(i);
-                    String id = g.getString("id");
-                    g.put("favorite", prefs.getBoolean("favorite." + id, false));
-                    g.put("lastPlayed", prefs.getLong("played." + id, 0L));
-                    g.put("playtimeMs", playTracker.total(id));
-                    g.put("lastSessionMs", playTracker.last(id));
-                    g.put("plays", prefs.getInt("plays." + id, 0));
-                    g.put("cover", coverFor(id));
+                    decorate(g, g.getString("id"));
                     g.put("fpsPatch", fpsPatchState(g));
                 }
                 JSONArray appList = new JSONArray();
@@ -431,12 +425,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     JSONObject a = new JSONObject(apps.getJSONObject(i).toString());
                     String id = "app:" + a.getString("package");
                     a.put("id", id);
-                    a.put("favorite", prefs.getBoolean("favorite." + id, false));
-                    a.put("lastPlayed", prefs.getLong("played." + id, 0L));
-                    a.put("playtimeMs", playTracker.total(id));
-                    a.put("lastSessionMs", playTracker.last(id));
-                    a.put("plays", prefs.getInt("plays." + id, 0));
-                    a.put("cover", coverFor(id));
+                    decorate(a, id);
                     appList.put(a);
                 }
                 JSONArray folderList = new JSONArray();
@@ -472,6 +461,16 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 Log.e("PocketDeck", "State update", e);
             }
         });
+    }
+
+    /** The favorite/lastPlayed/playtime/cover fields shared by a game and an app card. */
+    private void decorate(JSONObject item, String id) throws Exception {
+        item.put("favorite", prefs.getBoolean("favorite." + id, false));
+        item.put("lastPlayed", prefs.getLong("played." + id, 0L));
+        item.put("playtimeMs", playTracker.total(id));
+        item.put("lastSessionMs", playTracker.last(id));
+        item.put("plays", prefs.getInt("plays." + id, 0));
+        item.put("cover", coverFor(id));
     }
 
     private String coverFor(String id) {

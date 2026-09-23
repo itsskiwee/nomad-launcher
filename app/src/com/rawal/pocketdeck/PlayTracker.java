@@ -21,14 +21,16 @@ final class PlayTracker {
     }
     synchronized long total(String id) { return prefs.getLong("total." + id, 0); }
     synchronized long last(String id) { return prefs.getLong("last." + id, 0); }
+    private int bootCount() {
+        return android.provider.Settings.Global.getInt(context.getContentResolver(), "boot_count", -1);
+    }
     synchronized void begin(String id, String pkg, long started) {
         settle();
         prefs.edit().remove("id").apply();
         if (!enabled()) return;
         // Commit the launch marker before Android can reclaim the launcher process.
         prefs.edit().putString("id", id).putString("package", pkg).putLong("start", started)
-            .putInt("boot", android.provider.Settings.Global.getInt(context.getContentResolver(), "boot_count", -1))
-            .putLong("base", total(id)).putLong("counted", 0).remove("end").commit();
+            .putInt("boot", bootCount()).putLong("base", total(id)).putLong("counted", 0).remove("end").commit();
     }
     synchronized void settle() {
         String id = prefs.getString("id", "");
@@ -36,8 +38,7 @@ final class PlayTracker {
         if (!enabled()) { prefs.edit().remove("id").apply(); return; }
         long start = prefs.getLong("start", 0), end = prefs.getLong("end", System.currentTimeMillis());
         prefs.edit().putLong("end", end).apply();
-        if (prefs.getInt("boot", -1) != android.provider.Settings.Global.getInt(context.getContentResolver(), "boot_count", -1)
-                || start <= 0 || end < start) { prefs.edit().remove("id").apply(); return; }
+        if (prefs.getInt("boot", -1) != bootCount() || start <= 0 || end < start) { prefs.edit().remove("id").apply(); return; }
         try {
             UsageStatsManager manager = (UsageStatsManager) context.getSystemService(Context.USAGE_STATS_SERVICE);
             UsageEvents events = manager.queryEvents(start, end);
