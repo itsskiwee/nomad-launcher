@@ -3,8 +3,6 @@ package com.rawal.pocketdeck;
 import android.app.Activity;
 import android.app.WallpaperManager;
 import android.content.BroadcastReceiver;
-import android.content.ClipData;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
@@ -67,7 +65,6 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     /** A page that has not answered a state update for this long while resumed is reloaded. */
     private static final long PAGE_STALL_MS = 45000L;
     private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43;
-    private static final String[] EMULATORS = { "org.ppsspp.ppsspp", "org.ppsspp.ppssppgold" };
 
     private File artDir;
     private SharedPreferences prefs;
@@ -84,7 +81,6 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     private String pendingCoverId = "";
     private volatile boolean webGone;
     private long pageAskedAt, pageAnsweredAt;
-    private volatile String emulator;
     private volatile boolean defaultHome;
     private volatile boolean cleanupVisible;
     private volatile boolean cleanupRunning;
@@ -419,6 +415,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     JSONObject g = games.getJSONObject(i);
                     decorate(g, g.getString("id"));
                     g.put("fpsPatch", fpsPatchState(g));
+                    g.put("emuChoice", prefs.getString("emu.game." + g.getString("id"), ""));
                 }
                 JSONArray appList = new JSONArray();
                 for (int i = 0; i < apps.length(); i++) {
@@ -447,7 +444,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 state.put("batteryStats", batteryTracker.snapshot(this, battery));
                 state.put("usageAccess", playTracker.enabled());
                 state.put("network", networkName());
-                state.put("emulator", emulator != null);
+                state.put("systems", systemsState(games));
+                state.put("emulatorPackages", new JSONArray(Systems.emulatorPackages()));
                 state.put("defaultHome", defaultHome);
                 File wallpaper = new File(artDir, "wallpaper.jpg");
                 state.put("wallpaper", wallpaper.exists() ? "wallpaper.jpg?v=" + wallpaper.lastModified() : "");
@@ -514,11 +512,25 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         return info != null && info.activityInfo != null && getPackageName().equals(info.activityInfo.packageName);
     }
 
-    private String getEmulator() {
-        for (String pkg : EMULATORS) {
-            try { getPackageManager().getPackageInfo(pkg, 0); return pkg; } catch (Exception ignored) { }
+    /** Each system, how many games it has, the emulator that will play them and the other options. */
+    private JSONArray systemsState(JSONArray games) throws Exception {
+        java.util.Map<String, Integer> counts = new java.util.HashMap<>();
+        for (int i = 0; i < games.length(); i++) {
+            String sys = games.getJSONObject(i).optString("system", "psp");
+            counts.put(sys, counts.containsKey(sys) ? counts.get(sys) + 1 : 1);
         }
-        return null;
+        JSONArray out = new JSONArray();
+        for (Systems.System s : Systems.ALL) {
+            JSONArray options = new JSONArray();
+            for (Systems.Choice c : s.choices) {
+                options.put(new JSONObject().put("key", c.key()).put("label", c.label()).put("emulator", c.emulator.id)
+                    .put("installed", c.emulator.installed(this) != null).put("site", c.emulator.site != null));
+            }
+            Systems.Choice chosen = Systems.resolve(this, s, null, prefs.getString("emu.system." + s.id, null));
+            out.put(new JSONObject().put("id", s.id).put("name", s.name).put("games", counts.containsKey(s.id) ? counts.get(s.id) : 0)
+                .put("choice", chosen == null ? "" : chosen.key()).put("pinned", prefs.getString("emu.system." + s.id, "")).put("options", options));
+        }
+        return out;
     }
 
     private static long dirSize(File dir) {
@@ -540,7 +552,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
 
     /** Package-manager round trips are not free; they are answered from these caches on the UI thread. */
     private void refreshDeviceFacts() {
-        emulator = getEmulator();
+        Systems.refresh(this);
         defaultHome = isHome();
     }
 
@@ -743,9 +755,11 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         JSONObject game = findGame(id);
         if (game == null) { toast("Game is no longer in the library. Refresh your library."); return; }
         Systems.System system = Systems.byId(game.optString("system", "psp"));
-        if (system != Systems.PSP) { launchOn(system, id, Uri.parse(game.optString("uri"))); return; }
-        String emulator = this.emulator != null ? this.emulator : getEmulator();
-        if (emulator == null) { toast("Install PPSSPP to play PSP games."); return; }
+        Systems.Choice choice = Systems.resolve(this, system, prefs.getString("emu.game." + id, null), prefs.getString("emu.system." + system.id, null));
+        if (choice == null) {
+            toast("Install " + system.choices.get(0).emulator.name + " to play " + system.name + " games. Settings › Library lists the options.");
+            return;
+        }
         Uri uri = Uri.parse(game.optString("uri"));
         // Play gets its own thread: the shared worker may be mid-scan or waiting on root.
         new Thread(() -> {
@@ -755,47 +769,21 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 toast("This game cannot be opened. Reconnect its folder in Settings.");
                 return;
             }
-            patchEmulatorConfig(game);
+            if (choice.emulator == Systems.PPSSPP) patchEmulatorConfig(game);
             runOnUiThread(() -> {
                 try {
-                    Intent intent = new Intent(Intent.ACTION_VIEW).setComponent(new ComponentName(emulator, "org.ppsspp.ppsspp.PpssppActivity")).setData(uri);
-                    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-                    intent.setClipData(ClipData.newRawUri("PSP game", uri));
                     long started = System.currentTimeMillis();
-                    startActivity(intent);
-                    playTracker.begin(id, emulator, started);
+                    startActivity(Systems.launch(this, system, choice, uri));
+                    playTracker.begin(id, choice.emulator.installed(this), started);
                     recordPlay(id);
                     sendState();
                 } catch (Exception e) {
-                    toast("PPSSPP could not open this game: " + e.getClass().getSimpleName());
+                    Log.w("PocketDeck", "Launch " + system.id + " with " + choice.key(), e);
+                    String why = e instanceof IllegalArgumentException ? e.getMessage() : e.getClass().getSimpleName();
+                    toast(choice.emulator.name + " could not open this game: " + why);
                 }
             });
         }, "pocketdeck-launch").start();
-    }
-
-    /** Hands a non-PSP game to its emulator (see Systems). */
-    private void launchOn(Systems.System system, String id, Uri uri) {
-        if (!Systems.installed(this, system.pkg)) { toast("Install " + emulatorName(system) + " to play " + system.name + " games."); return; }
-        try {
-            long started = System.currentTimeMillis();
-            startActivity(Systems.launch(this, system, uri));
-            playTracker.begin(id, system.pkg, started);
-            recordPlay(id);
-            sendState();
-        } catch (Exception e) {
-            Log.w("PocketDeck", "Launch " + system.id, e);
-            toast(emulatorName(system) + " could not open this game: " + e.getClass().getSimpleName());
-        }
-    }
-
-    private static String emulatorName(Systems.System system) {
-        switch (system.pkg) {
-            case Systems.RETROARCH: return "RetroArch";
-            case "xyz.aethersx2.android": return "NetherSX2";
-            case "com.github.stenzek.duckstation": return "DuckStation";
-            case "org.mupen64plusae.v3.fzurita": return "M64Plus FZ";
-            default: return "the emulator";
-        }
     }
 
     /** Deletes a PSP game file through the folder grant (Android games go through the system uninstaller). */
@@ -894,6 +882,29 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (findGame(id) == null) return;
             prefs.edit().putBoolean("fps60." + id, on).apply();
             sendState();
+        }
+        /** Pins the emulator for a whole system ("system") or one game ("game"); an empty key goes back to automatic. */
+        @JavascriptInterface public void setEmulator(String scope, String id, String key) {
+            String pref = "game".equals(scope) ? "emu.game." + id : "emu.system." + id;
+            if ("game".equals(scope) && findGame(id) == null) return;
+            if (key == null || key.isEmpty()) prefs.edit().remove(pref).apply();
+            else prefs.edit().putString(pref, key).apply();
+            sendState();
+        }
+        /** Opens an emulator's official page; only sites from the built-in catalogue can be opened. */
+        @JavascriptInterface public void emulatorSite(String emulatorId) {
+            Systems.Emulator e = Systems.emulatorById(emulatorId);
+            if (e == null || e.site == null) return;
+            runOnUiThread(() -> {
+                try { startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(e.site)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); }
+                catch (Exception ex) { toast("No browser is available to open " + e.site); }
+            });
+        }
+        /** Opens the emulator currently chosen for a system, for its own settings (BIOS, controls). */
+        @JavascriptInterface public void openEmulator(String systemId) {
+            Systems.System s = Systems.byId(systemId);
+            Systems.Choice c = Systems.resolve(MainActivity.this, s, null, prefs.getString("emu.system." + s.id, null));
+            if (c != null) runOnUiThread(() -> MainActivity.this.openApp(c.emulator.installed(MainActivity.this)));
         }
         @JavascriptInterface public void settings(String which) { runOnUiThread(() -> MainActivity.this.settings(which)); }
         @JavascriptInterface public void openApp(String pkg) { runOnUiThread(() -> MainActivity.this.openApp(pkg)); }

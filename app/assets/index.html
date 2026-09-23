@@ -91,9 +91,9 @@
     <div class="rows">
      <button class="row" id="androidGamesToggle" role="switch" aria-checked="true"><span>Show installed Android games</span><i class="switch"></i></button>
     </div>
-    <h2>Emulator</h2>
+    <h2>Emulators</h2>
     <div class="rows" id="emulatorRows"></div>
-    <p class="hint">Each emulator manages its own games. Open one to browse and play.</p>
+    <p class="hint">Nomad picks the first installed emulator for each system. Choose another for a whole system here, or for one game from its ⋯ menu.</p>
    </section>
 
    <section data-section="artwork">
@@ -223,9 +223,11 @@
  <button id="menuFavorite">Add to favorites</button>
  <button id="menuArt">Choose artwork…</button>
  <button id="menuArtReset">Use original artwork</button>
+ <button id="menuEmulator">Play with</button>
  <button id="menuFps">60 FPS patch</button>
  <button id="menuDelete" class="danger">Delete game…</button>
 </div>
+<div class="menu chooser" id="chooser" role="menu" hidden><div class="menu-title" id="chooserTitle"></div></div>
 <div id="toast" role="status"></div>
 <script src="app.js"></script>
 </body>

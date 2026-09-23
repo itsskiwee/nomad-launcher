@@ -60,7 +60,8 @@ function allGames() {
   return psp.concat(apps);
 }
 // Emulators never appear in the game library; they stay reachable in Apps and Settings.
-const isEmulator = g => g.android && /^(org\.ppsspp\.ppsspp(gold)?|com\.retroarch(\.aarch64)?|com\.github\.stenzek\.duckstation|org\.mupen64plusae\.v3\.fzurita|xyz\.aethersx2\.android)$/.test(g.package);
+const isEmulator = g => g.android && (state.emulatorPackages || []).includes(g.package);
+const systemOf = g => (state.systems || []).find(s => s.id === (g.system || 'psp'));
 function homeGames() { return allGames(); }
 function byPlayed(a, b) {
   return (b.plays || 0) - (a.plays || 0) || (b.lastPlayed || 0) - (a.lastPlayed || 0) || a.title.localeCompare(b.title);
@@ -93,7 +94,8 @@ function goPage(next) {
 }
 window.goHome = () => goPage('home');
 window.deckBack = () => {
-  if (!$('gameMenu').hidden) closeGameMenu();
+  if (!$('chooser').hidden) closeChooser();
+  else if (!$('gameMenu').hidden) closeGameMenu();
   else if (page !== 'home') goPage('home');
   else if ($('homePages').scrollTop > 0) showHomePanel(0);
 };
@@ -659,6 +661,9 @@ function openGameMenu(game, x, y) {
   // Only discs with a known 60 FPS patch get the row; the launcher applies it through PPSSPP's cheat file.
   $('menuFps').hidden = !game.fpsPatch || game.fpsPatch === 'none';
   $('menuFps').textContent = game.fpsPatch === 'on' ? '60 FPS patch: on' : '60 FPS patch: off';
+  const sys = game.android ? null : systemOf(game);
+  $('menuEmulator').hidden = !sys || sys.options.filter(o => o.installed).length < 2 && !game.emuChoice;
+  if (sys) $('menuEmulator').textContent = 'Play with: ' + (optionLabel(sys, game.emuChoice) || optionLabel(sys, sys.choice) || 'none installed');
   $('menuDelete').textContent = game.android ? 'Uninstall…' : 'Delete game…';
   $('menuDelete').classList.remove('confirm');
   menu.hidden = false;
@@ -666,11 +671,40 @@ function openGameMenu(game, x, y) {
   menu.style.left = Math.max(12, Math.min(x, window.innerWidth - menu.offsetWidth - 12)) + 'px';
   menu.style.top = Math.max(12, Math.min(y, window.innerHeight - menu.offsetHeight - 12)) + 'px';
 }
-function closeGameMenu() { $('gameMenu').hidden = true; menuGame = null; }
+function closeGameMenu() { $('gameMenu').hidden = true; menuGame = null; closeChooser(); }
+// A small list of choices in the same popup style as the game menu.
+function openChooser(title, items, x, y) {
+  const menu = $('chooser');
+  $('chooserTitle').textContent = title;
+  menu.querySelectorAll('button').forEach(b => b.remove());
+  items.forEach(item => {
+    const b = document.createElement('button');
+    b.setAttribute('role', 'menuitemradio');
+    if (item.checked !== undefined) b.setAttribute('aria-checked', String(!!item.checked));
+    const text = document.createElement('span'); text.textContent = item.label;
+    if (item.sub) { const small = document.createElement('small'); small.textContent = item.sub; text.append(small); }
+    b.append(text);
+    if (item.checked !== undefined) { const r = document.createElement('i'); r.className = 'radio'; b.append(r); }
+    b.onclick = e => { e.stopPropagation(); closeChooser(); item.run(); };
+    menu.append(b);
+  });
+  menu.hidden = false;
+  menuOpenedAt = Date.now();
+  menu.style.left = Math.max(12, Math.min(x, window.innerWidth - menu.offsetWidth - 12)) + 'px';
+  menu.style.top = Math.max(12, Math.min(y, window.innerHeight - menu.offsetHeight - 12)) + 'px';
+  if (typeof focusFirst === 'function') focusFirst(menu);
+}
+function closeChooser() { $('chooser').hidden = true; }
 $('menuPlay').onclick = () => { const g = menuGame; closeGameMenu(); if (g) playGame(g.id); };
 $('menuFavorite').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('favorite', g.id); };
 $('menuArt').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('pickCover', g.id); };
 $('menuArtReset').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('clearCover', g.id); };
+$('menuEmulator').onclick = e => {
+  e.stopPropagation();
+  const g = menuGame, r = $('gameMenu').getBoundingClientRect();
+  closeGameMenu();
+  if (g) openEmulatorChooser('game', systemOf(g), g.emuChoice, r.left, r.top, g);
+};
 $('menuFps').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('fpsPatch', g.id, g.fpsPatch !== 'on'); };
 // Deleting a file is irreversible, so the first tap only arms the button.
 $('menuDelete').onclick = e => {
@@ -692,9 +726,12 @@ $('artButton').onclick = e => {
   const r = $('artButton').getBoundingClientRect();
   openGameMenu(g, r.left, r.top - 8 - 230);
 };
-document.addEventListener('click', e => { if (!$('gameMenu').hidden && !$('gameMenu').contains(e.target)) closeGameMenu(); });
+document.addEventListener('click', e => {
+  if (!$('gameMenu').hidden && !$('gameMenu').contains(e.target)) closeGameMenu();
+  if (!$('chooser').hidden && !$('chooser').contains(e.target)) closeChooser();
+});
 // The release of the long-press must not count as a tap on the menu that just appeared.
-document.addEventListener('click', e => { if (!$('gameMenu').hidden && Date.now() - menuOpenedAt < 500) { e.stopPropagation(); e.preventDefault(); } }, true);
+document.addEventListener('click', e => { if ((!$('gameMenu').hidden || !$('chooser').hidden) && Date.now() - menuOpenedAt < 500) { e.stopPropagation(); e.preventDefault(); } }, true);
 
 // ---- settings ----
 let section = prefs.get('settingsSection', 'library');
@@ -764,7 +801,7 @@ function renderStorage() {
   $('storageFill').style.width = total ? Math.round(used / total * 100) + '%' : '0';
   const bySystem = new Map();
   state.games.forEach(g => { const key = g.system || 'psp'; bySystem.set(key, (bySystem.get(key) || 0) + (g.size || 0)); });
-  const names = { psp: 'PSP', ps1: 'PlayStation', ps2: 'PlayStation 2', n64: 'Nintendo 64', snes: 'Super Nintendo', nes: 'NES', gba: 'Game Boy Advance', gb: 'Game Boy', genesis: 'Genesis', '32x': '32X', nds: 'Nintendo DS', dreamcast: 'Dreamcast', arcade: 'Arcade', pce: 'PC Engine' };
+  const names = Object.fromEntries((state.systems || []).map(s => [s.id, s.name]));
   const rows = $('storageRows');
   rows.replaceChildren();
   const add = (label, bytes, sub) => {
@@ -805,7 +842,7 @@ function renderSettings() {
   if (!state.folders.length) {
     const p = document.createElement('p');
     p.className = 'hint';
-    p.textContent = 'No folders yet. Add the folders that hold your games — a subfolder named N64, PS1, PS2, SNES… sets the system; anything else counts as PSP.';
+    p.textContent = 'No folders yet. Add the folders that hold your games — a subfolder named after a system (N64, PS1, PS2, GC, 3DS, SNES…, or ES-DE’s folder names) sets the system; anything else counts as PSP.';
     rows.append(p);
   }
   renderArtworkRows();
@@ -869,37 +906,49 @@ function appName(pkg) {
 $('addFolderSetting').onclick = () => native('chooseFolder');
 $('rescanSetting').onclick = () => native('refresh');
 $('androidGamesToggle').onclick = () => { androidGames = !androidGames; prefs.set('androidGames', androidGames); renderSettings(); renderHome(); renderLibrary(); };
-const EMULATOR_APPS = [
-  { pkg: 'org.ppsspp.ppsspp', name: 'PPSSPP' },
-  { pkg: 'org.ppsspp.ppssppgold', name: 'PPSSPP (Gold)' },
-  { pkg: 'com.retroarch.aarch64', name: 'RetroArch' },
-  { pkg: 'com.retroarch', name: 'RetroArch' },
-  { pkg: 'com.github.stenzek.duckstation', name: 'DuckStation' },
-  { pkg: 'org.mupen64plusae.v3.fzurita', name: 'N64 (M64Plus FZ)' },
-  { pkg: 'org.mupen64plusae.v3.fzurita.pro', name: 'N64 (M64Plus FZ Pro)' },
-];
+// One row per system that has games: the emulator that will play them, tap to choose another.
+function optionLabel(sys, key) {
+  const o = sys && sys.options.find(o => o.key === key);
+  return o ? o.label : '';
+}
 function renderEmulatorRows() {
-  const rows = $('emulatorRows'), seen = new Set();
+  const rows = $('emulatorRows');
   rows.replaceChildren();
-  EMULATOR_APPS.forEach(e => {
-    if (!state.apps.find(a => a.package === e.pkg) || seen.has(e.name)) return;
-    seen.add(e.name);
+  (state.systems || []).filter(s => s.games > 0).forEach(sys => {
     const row = document.createElement('button');
     row.className = 'row';
-    const span = document.createElement('span');
-    span.textContent = 'Open ' + e.name;
-    const chev = document.createElement('i');
-    chev.className = 'chev';
-    row.append(span, chev);
-    row.onclick = () => native('openApp', e.pkg);
+    const label = document.createElement('span');
+    const name = document.createElement('span'); name.textContent = sys.name;
+    const small = document.createElement('small');
+    const missing = sys.options.find(o => !o.installed && o.site) || sys.options[0];
+    small.textContent = `${sys.games} ${sys.games === 1 ? 'game' : 'games'} · ` + (sys.choice
+      ? optionLabel(sys, sys.choice) + (sys.pinned ? '' : ' · automatic')
+      : `Needs ${missing ? missing.label : 'an emulator'}`);
+    label.append(name, small);
+    const chev = document.createElement('i'); chev.className = 'chev';
+    row.append(label, chev);
+    row.onclick = e => { e.stopPropagation(); const r = row.getBoundingClientRect(); openEmulatorChooser('system', sys, sys.pinned, r.right - 280, r.bottom); };
     rows.append(row);
   });
   if (!rows.childElementCount) {
     const p = document.createElement('p');
     p.className = 'hint';
-    p.textContent = 'No emulators installed.';
+    p.textContent = 'Add a game folder and the emulators for its systems show up here.';
     rows.append(p);
   }
+}
+// scope "system" pins an emulator for every game of a system; "game" for one game only.
+function openEmulatorChooser(scope, sys, pinned, x, y, game) {
+  const target = scope === 'game' ? game.id : sys.id;
+  const items = [];
+  const auto = scope === 'game' ? sys.options.find(o => o.key === sys.choice) : sys.options.find(o => o.installed);
+  items.push({ label: 'Automatic', sub: auto ? auto.label : 'Nothing installed', checked: !pinned, run: () => native('setEmulator', scope, target, '') });
+  sys.options.filter(o => o.installed).forEach(o => items.push({ label: o.label, checked: pinned === o.key, run: () => native('setEmulator', scope, target, o.key) }));
+  if (scope === 'system' && sys.choice) items.push({ label: 'Open ' + optionLabel(sys, sys.choice).replace(/ \(.*/, ''), run: () => native('openEmulator', sys.id) });
+  const seen = new Set();
+  sys.options.filter(o => !o.installed && o.site && !seen.has(o.emulator) && seen.add(o.emulator))
+    .forEach(o => items.push({ label: 'Get ' + o.label.replace(/ \(.*/, '') + '…', run: () => native('emulatorSite', o.emulator) }));
+  openChooser(scope === 'game' ? `${game.title} · play with` : sys.name, items, x, y);
 }
 document.querySelectorAll('#backgroundMode button').forEach(b => b.onclick = () => {
   backgroundMode = b.dataset.value;

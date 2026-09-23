@@ -444,6 +444,12 @@ button.row:active { background: var(--surface-2); }
 .menu button:active { background: var(--line); }
 .menu-title { padding: 8px 12px 6px; font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 260px; }
 .menu .danger { color: #ff8a80; }
+.chooser { max-width: 320px; max-height: calc(100dvh - 24px); overflow-y: auto; z-index: 16; }
+.chooser button { height: auto; min-height: 42px; padding: 8px 12px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.chooser button > span { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.chooser small { font-size: 12px; font-weight: 400; color: var(--text-3); }
+.chooser [aria-checked="true"] .radio { border-color: var(--accent); }
+.chooser [aria-checked="true"] .radio:before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--accent); }
 .menu .danger.confirm { background: rgba(255, 138, 128, .14); }
 .art-row { min-height: 60px; }
 .art-row .thumb { width: 32px; height: 55px; border-radius: 4px; object-fit: cover; background: var(--surface-2); flex: none; }
