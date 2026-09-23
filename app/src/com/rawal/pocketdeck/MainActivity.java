@@ -69,7 +69,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     };
     /** A page that has not answered a state update for this long while resumed is reloaded. */
     private static final long PAGE_STALL_MS = 45000L;
-    private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43, PICK_MEDIA = 44;
+    private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43, PICK_MEDIA = 44, PICK_VIDEO = 45;
 
     private File artDir;
     private SharedPreferences prefs;
@@ -724,6 +724,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
         } else if (request == PICK_MEDIA) {
             importMedia(uri);
+        } else if (request == PICK_VIDEO) {
+            String id = pendingCoverId;
+            if (findGame(id) == null) return;
+            worker.execute(() -> {
+                if (copyVideo(uri, new File(artDir, id + "-video.mp4"))) sendState();
+                else toast("That video could not be used. Clips up to 80 MB work.");
+            });
         } else if (request == PICK_COVER || request == PICK_WALLPAPER) {
             final String target;
             try {
@@ -1266,6 +1273,19 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (!id.startsWith("app:") && findGame(id) == null) return;
             pendingCoverId = id;
             runOnUiThread(() -> pickImage(PICK_COVER));
+        }
+        @JavascriptInterface public void pickPreview(String id) {
+            if (findGame(id) == null) return;
+            pendingCoverId = id;
+            runOnUiThread(() -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("video/mp4");
+                try { startActivityForResult(intent, PICK_VIDEO); } catch (Exception e) { toast("The video picker is unavailable."); }
+            });
+        }
+        @JavascriptInterface public void clearPreview(String id) {
+            if (findGame(id) == null) return;
+            new File(artDir, id + "-video.mp4").delete();
+            sendState();
         }
         @JavascriptInterface public void clearCover(String id) {
             try { new File(artDir, artKey(id) + "-cover.jpg").delete(); } catch (Exception ignored) { }

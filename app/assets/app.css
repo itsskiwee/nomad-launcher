@@ -57,6 +57,9 @@ h1, h2, h3, p { margin: 0; }
   transition: opacity .35s ease;
 }
 .backdrop video { inset: 0; width: 100%; height: 100%; object-position: 50% 50%; }
+/* A game's preview clip sits above the art backdrop and fades in once it is actually playing. */
+.backdrop #previewVideo { transition: opacity .6s ease; }
+.backdrop #previewVideo.show { opacity: .55; }
 .backdrop .show { opacity: .5; }
 body[data-background="custom"] .backdrop .show, body[data-background="video"] .backdrop .show { opacity: .7; }
 body[data-page="library"] .backdrop .show, body[data-page="apps"] .backdrop .show { opacity: .18; }

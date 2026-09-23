@@ -91,6 +91,7 @@ function goPage(next) {
   if (next === 'home') renderHome();
   if (next === 'settings') renderSettings();
   schedulePerformancePolling();
+  updatePreview();
 }
 window.goHome = () => goPage('home');
 window.deckBack = () => {
@@ -166,6 +167,26 @@ document.addEventListener('visibilitychange', () => {
   if (!video.dataset.src) return;
   if (document.hidden) video.pause(); else video.play().catch(() => {});
 });
+
+// ---- game preview clips ----
+// Home plays the selected game's clip (imported from ES-DE or chosen in its menu) after a short
+// pause on it, so flicking through covers never starts a string of videos.
+const preview = $('previewVideo');
+let previewTimer = 0, previewsOn = prefs.get('previews', true);
+preview.onplaying = () => preview.classList.add('show');
+function stopPreview() {
+  clearTimeout(previewTimer);
+  preview.classList.remove('show');
+  if (preview.dataset.src) { delete preview.dataset.src; preview.pause(); preview.removeAttribute('src'); preview.load(); }
+}
+function updatePreview() {
+  const game = page === 'home' && homePanel() === 0 && $('gameMenu').hidden ? current() : null;
+  const src = previewsOn && !document.hidden && game && /^[a-f0-9]{24}-video\.mp4(\?v=\d+)?$/.test(game.video || '') ? '/art/' + game.video : '';
+  if (src && preview.dataset.src === src) return;
+  stopPreview();
+  if (src) previewTimer = setTimeout(() => { preview.dataset.src = src; preview.src = src; preview.play().catch(() => {}); }, 1200);
+}
+document.addEventListener('visibilitychange', updatePreview);
 
 // ---- theme ----
 // One accent, surfaces tinted toward its hue, neutral text. Deck is the fixed default; a video
@@ -478,6 +499,7 @@ function renderHome() {
   }
   $('heroTitle').textContent = game.title;
   updateBackdrop();
+  updatePreview();
 }
 
 function empty(title, description, action = false) {
@@ -553,7 +575,7 @@ $('homeFavorites').addEventListener('touchend', e => {
   if (dy > 70 && dy > Math.abs(dx) * 1.5) showHomePanel(0);
 }, { passive: true });
 $('homeFavorites').addEventListener('touchcancel', () => { favoritesSwipe = null; }, { passive: true });
-$('homePages').addEventListener('scroll', closeGameMenu, { passive: true });
+$('homePages').addEventListener('scroll', () => { closeGameMenu(); updatePreview(); }, { passive: true });
 
 // ---- library ----
 function renderLibrary() {
@@ -655,6 +677,7 @@ function openGameMenu(game, x, y) {
   $('menuPlaytime').textContent = `${formatDuration(game.playtimeMs)} played · Last session ${formatDuration(game.lastSessionMs)}`;
   $('menuFavorite').textContent = game.favorite ? 'Remove from favorites' : 'Add to favorites';
   $('menuArtReset').hidden = !game.customCover;
+  $('menuPreview').hidden = !!game.android;
   // Only discs with a known 60 FPS patch get the row; the launcher applies it through PPSSPP's cheat file.
   $('menuFps').hidden = !game.fpsPatch || game.fpsPatch === 'none';
   $('menuFps').textContent = game.fpsPatch === 'on' ? '60 FPS patch: on' : '60 FPS patch: off';
@@ -698,6 +721,15 @@ function closeChooser() { $('chooser').hidden = true; }
 $('menuPlay').onclick = () => { const g = menuGame; closeGameMenu(); if (g) playGame(g.id); };
 $('menuFavorite').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('favorite', g.id); };
 $('menuArt').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('pickCover', g.id); };
+$('menuPreview').onclick = e => {
+  e.stopPropagation();
+  const g = menuGame, r = $('gameMenu').getBoundingClientRect();
+  closeGameMenu();
+  if (!g) return;
+  const items = [{ label: g.video ? 'Choose another video…' : 'Choose video…', run: () => native('pickPreview', g.id) }];
+  if (g.video) items.push({ label: 'Remove video', run: () => native('clearPreview', g.id) });
+  openChooser(`${g.title} · preview`, items, r.left, r.top);
+};
 $('menuArtReset').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('clearCover', g.id); };
 $('menuEmulator').onclick = e => {
   e.stopPropagation();
@@ -854,6 +886,7 @@ function renderSettings() {
   }
   renderArtworkRows();
   $('autoArtToggle').setAttribute('aria-checked', String(state.autoArt !== false));
+  $('previewsToggle').setAttribute('aria-checked', String(previewsOn));
   renderEmulatorRows();
   const hidden = state.games.filter(g => g.hidden);
   $('hiddenGames').hidden = !hidden.length;
@@ -918,6 +951,7 @@ $('addFolderSetting').onclick = () => native('chooseFolder');
 $('autoArtToggle').onclick = () => native('setAutoArt', state.autoArt === false);
 $('findCovers').onclick = () => { native('findCovers'); notify('Looking for covers…'); };
 $('importMedia').onclick = () => native('importMedia');
+$('previewsToggle').onclick = () => { previewsOn = !previewsOn; prefs.set('previews', previewsOn); renderSettings(); updatePreview(); };
 $('rescanSetting').onclick = () => native('refresh');
 $('hiddenGames').onclick = e => {
   e.stopPropagation();
