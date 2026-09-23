@@ -392,6 +392,8 @@ button.row:active { background: var(--surface-2); }
 .row .value { color: var(--text-3); font-weight: 400; }
 .chev { width: 16px; height: 16px; flex: none; color: var(--text-3); }
 .chev:before { content: ''; display: block; width: 7px; height: 7px; margin: 3px 0 0 2px; border: solid currentColor; border-width: 1.5px 1.5px 0 0; transform: rotate(45deg); }
+.row-main { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; justify-content: center; gap: 2px; text-align: left; font-weight: 500; }
+.row-main small { font-size: 12px; font-weight: 400; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .remove { width: 36px; height: 36px; margin: -4px -8px -4px 0; display: flex; align-items: center; justify-content: center; border-radius: var(--radius); color: var(--text-3); flex: none; }
 .remove:active { color: var(--text); background: var(--line); }
 .remove svg { width: 16px; height: 16px; }

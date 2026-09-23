@@ -69,7 +69,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     };
     /** A page that has not answered a state update for this long while resumed is reloaded. */
     private static final long PAGE_STALL_MS = 45000L;
-    private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43, PICK_MEDIA = 44, PICK_VIDEO = 45;
+    private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43, PICK_MEDIA = 44, PICK_VIDEO = 45, PICK_SYNC = 46, PICK_SAVES = 47;
 
     private File artDir;
     private SharedPreferences prefs;
@@ -307,6 +307,11 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         immersive();
         timer.removeCallbacks(ticker);
         if (!worker.isShutdown()) worker.execute(() -> { playTracker.settle(); refreshDeviceFacts(); runOnUiThread(ticker); });
+        // Back from a game (or just started): send new saves and pick up another device's.
+        if (prefs.getBoolean("sync.auto", true) && (prefs.getLong("sync.launched", 0) > prefs.getLong("sync.last", 0) || !syncedThisRun)) {
+            syncedThisRun = true;
+            syncSaves(true);
+        }
         else timer.post(ticker);
         media.start();
         sendMedia();
@@ -426,6 +431,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         media.stop();
         worker.shutdownNow();
         artWorker.shutdownNow();
+        saveWorker.shutdownNow();
         if (!webGone) {
             web.removeJavascriptInterface("Deck");
             web.destroy();
@@ -545,6 +551,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 state.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
                 state.put("rootFeatures", Root.enabled(this));
                 state.put("autoArt", prefs.getBoolean("autoArt", true));
+                state.put("saves", savesState());
                 if (webGone) return;
                 pageAskedAt = System.currentTimeMillis();
                 web.evaluateJavascript("window.receiveState && window.receiveState(" + state + ")", value -> pageAnsweredAt = System.currentTimeMillis());
@@ -702,6 +709,15 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         try { startActivityForResult(intent, PICK_FOLDER); } catch (Exception e) { toast("The Android folder picker is unavailable."); }
     }
 
+    private void pickTree(int request, String initial) {
+        runOnUiThread(() -> {
+            Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION
+                | Intent.FLAG_GRANT_WRITE_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+            intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse("content://com.android.externalstorage.documents/document/" + initial));
+            try { startActivityForResult(intent, request); } catch (Exception e) { toast("The Android folder picker is unavailable."); }
+        });
+    }
+
     private void pickImage(int request) {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT).addCategory(Intent.CATEGORY_OPENABLE).setType("image/*");
         try { startActivityForResult(intent, request); } catch (Exception e) { toast("The image picker is unavailable."); }
@@ -722,6 +738,14 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             } catch (Exception e) {
                 toast("Folder access was not granted. Please choose the folder again.");
             }
+        } else if (request == PICK_SYNC || request == PICK_SAVES) {
+            try {
+                getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
+            } catch (Exception e) { toast("Folder access was not granted."); return; }
+            if (request == PICK_SYNC) prefs.edit().putString("sync.folder", uri.toString()).apply();
+            else addSaveSet(folderName(uri.toString()).replaceAll(".* / ", ""), "saf", uri.toString());
+            sendState();
+            syncSaves(false);
         } else if (request == PICK_MEDIA) {
             importMedia(uri);
         } else if (request == PICK_VIDEO) {
@@ -741,6 +765,119 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 else toast("That image could not be used.");
             });
         }
+    }
+
+    // ---- save sync ----
+
+    private final ExecutorService saveWorker = Executors.newSingleThreadExecutor();
+    private volatile boolean syncing;
+    private boolean syncedThisRun;
+
+    private JSONArray saveSets() {
+        try { return new JSONArray(prefs.getString("sync.sets", "[]")); } catch (Exception e) { return new JSONArray(); }
+    }
+
+    /** Save folders are labelled for their mirror ("Nomad Saves/<label>"); a label is kept unique. */
+    private void addSaveSet(String label, String kind, String location) {
+        try {
+            JSONArray sets = saveSets();
+            HashSet<String> labels = new HashSet<>();
+            String path = savePath(kind, location);
+            for (int i = 0; i < sets.length(); i++) {
+                JSONObject s = sets.getJSONObject(i);
+                if (path.equals(savePath(s.optString("kind"), s.optString("location")))) return;
+                labels.add(sets.getJSONObject(i).optString("label"));
+            }
+            String clean = label.replaceAll("[\\\\/:*?\"<>|]", " ").trim(), unique = clean;
+            for (int n = 2; labels.contains(unique); n++) unique = clean + " " + n;
+            sets.put(new JSONObject().put("label", unique).put("kind", kind).put("location", location));
+            prefs.edit().putString("sync.sets", sets.toString()).apply();
+        } catch (Exception e) { Log.w("PocketDeck", "Save set", e); }
+    }
+
+    /** The file-system path of a save folder, so one folder added both ways is kept once. */
+    private static String savePath(String kind, String location) {
+        if ("root".equals(kind)) return location.replaceFirst("/+$", "");
+        try {
+            String id = DocumentsContract.getTreeDocumentId(Uri.parse(location));
+            String volume = id.substring(0, id.indexOf(':')), rest = id.substring(id.indexOf(':') + 1);
+            return ((volume.equals("primary") ? "/storage/emulated/0/" : "/storage/" + volume + "/") + rest).replaceFirst("/+$", "");
+        } catch (Exception e) { return location; }
+    }
+
+    /** Emulator save folders that exist on this device, found through root. */
+    private void findSaveFolders() {
+        saveWorker.execute(() -> {
+            String data = "/storage/emulated/0/Android/data/";
+            String ra = Root.run("grep '^savefile_directory' " + data + Systems.RETROARCH + "/files/retroarch.cfg", 5);
+            String raSaves = ra != null && ra.contains("\"/") ? ra.substring(ra.indexOf('"') + 1, ra.lastIndexOf('"')) : data + Systems.RETROARCH + "/files/saves";
+            String[][] known = {
+                { "PPSSPP", "/storage/emulated/0/PPSSPP/PSP/SAVEDATA" },
+                { "PPSSPP", data + "org.ppsspp.ppsspp/files/PSP/SAVEDATA" },
+                { "DuckStation", data + "com.github.stenzek.duckstation/files/memcards" },
+                { "NetherSX2", data + "xyz.aethersx2.android/files/memcards" },
+                { "RetroArch", raSaves },
+                { "M64Plus FZ", data + "org.mupen64plusae.v3.fzurita/files/GameData" },
+                { "Dolphin GameCube", data + "org.dolphinemu.dolphinemu/files/GC" },
+                { "Dolphin Wii", data + "org.dolphinemu.dolphinemu/files/Wii/title" },
+                { "Azahar", data + "org.azahar_emu.azahar/files/sdmc" },
+            };
+            int added = 0;
+            for (String[] k : known) {
+                String out = Root.run("[ -d " + SaveSync.quote(k[1]) + " ] && echo yes", 5);
+                if (out != null && out.startsWith("yes")) { int before = saveSets().length(); addSaveSet(k[0], "root", k[1]); if (saveSets().length() > before) added++; }
+            }
+            toast(added == 0 ? "No new emulator save folders found." : "Added " + added + (added == 1 ? " save folder." : " save folders."));
+            sendState();
+        });
+    }
+
+    /** Syncs every save folder; `quiet` runs (after playing, at start) only report problems. */
+    private void syncSaves(boolean quiet) {
+        String folder = prefs.getString("sync.folder", "");
+        if (folder.isEmpty() || syncing) return;
+        syncing = true;
+        sendState();
+        saveWorker.execute(() -> {
+            int up = 0, down = 0;
+            List<String> problems = new ArrayList<>();
+            try {
+                SaveSync.SafStore mirror = SaveSync.SafStore.of(getContentResolver(), Uri.parse(folder)).dir(SaveSync.ROOT);
+                JSONArray sets = saveSets();
+                String device = Build.MANUFACTURER + " " + Build.MODEL;
+                for (int i = 0; i < sets.length(); i++) {
+                    JSONObject set = sets.getJSONObject(i);
+                    String kind = set.optString("kind"), location = set.optString("location"), label = set.optString("label");
+                    if ("root".equals(kind) && !Root.enabled(this)) { problems.add(label + ": root features are off"); continue; }
+                    SaveSync.Store local = "root".equals(kind) ? new SaveSync.RootStore(location) : SaveSync.SafStore.of(getContentResolver(), Uri.parse(location));
+                    SaveSync.Result r = SaveSync.sync(local, mirror.dir(label), device, getSharedPreferences("savecache", 0), label);
+                    up += r.up; down += r.down;
+                    if (r.error != null) problems.add(label + ": " + r.error);
+                }
+            } catch (Exception e) {
+                problems.add(e.getMessage() == null ? "the sync folder cannot be opened" : e.getMessage());
+                Log.w("PocketDeck", "Save sync", e);
+            }
+            String summary = problems.isEmpty() ? (up + down == 0 ? "Up to date" : up + " sent, " + down + " received") : "Problem with " + problems.get(0);
+            prefs.edit().putLong("sync.last", System.currentTimeMillis()).putString("sync.status", summary).apply();
+            syncing = false;
+            if (!quiet || !problems.isEmpty() || down > 0) toast("Saves: " + summary + ".");
+            sendState();
+        });
+    }
+
+    private JSONObject savesState() throws Exception {
+        JSONArray sets = new JSONArray();
+        JSONArray raw = saveSets();
+        for (int i = 0; i < raw.length(); i++) {
+            JSONObject s = raw.getJSONObject(i);
+            String where = "root".equals(s.optString("kind")) ? s.optString("location").replace("/storage/emulated/0/", "") : folderName(s.optString("location"));
+            sets.put(new JSONObject().put("label", s.optString("label")).put("where", where));
+        }
+        String folder = prefs.getString("sync.folder", "");
+        return new JSONObject().put("folder", folder.isEmpty() ? "" : folderName(folder)).put("sets", sets)
+            .put("auto", prefs.getBoolean("sync.auto", true)).put("syncing", syncing)
+            .put("last", prefs.getLong("sync.last", 0)).put("status", prefs.getString("sync.status", ""));
     }
 
     /** Copies another frontend's covers, videos, titles, favorites and hidden flags for the games in the library. */
@@ -1078,7 +1215,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     // ---- launching ----
 
     private void recordPlay(String id) {
-        prefs.edit().putLong("played." + id, System.currentTimeMillis()).putInt("plays." + id, prefs.getInt("plays." + id, 0) + 1).apply();
+        prefs.edit().putLong("played." + id, System.currentTimeMillis()).putLong("sync.launched", System.currentTimeMillis()).putInt("plays." + id, prefs.getInt("plays." + id, 0) + 1).apply();
     }
 
     private void launch(String id) {
@@ -1219,6 +1356,24 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (on) fetchCovers(false);
         }
         @JavascriptInterface public void findCovers() { fetchCovers(true); }
+        @JavascriptInterface public void chooseSyncFolder() { pickTree(PICK_SYNC, "primary%3ASync"); }
+        @JavascriptInterface public void addSaveFolder() { pickTree(PICK_SAVES, "primary%3APPSSPP%2FPSP%2FSAVEDATA"); }
+        @JavascriptInterface public void findSaveFolders() {
+            if (Root.enabled(MainActivity.this)) MainActivity.this.findSaveFolders();
+            else toast("Emulators keep most saves in Android/data, which needs root features. Add other folders with Add save folder.");
+        }
+        @JavascriptInterface public void removeSaveSet(String label) {
+            JSONArray sets = saveSets(), kept = new JSONArray();
+            for (int i = 0; i < sets.length(); i++) if (!label.equals(sets.optJSONObject(i).optString("label"))) kept.put(sets.optJSONObject(i));
+            prefs.edit().putString("sync.sets", kept.toString()).apply();
+            sendState();
+        }
+        @JavascriptInterface public void clearSyncFolder() { prefs.edit().remove("sync.folder").remove("sync.status").remove("sync.last").apply(); sendState(); }
+        @JavascriptInterface public void setSaveAuto(boolean on) { prefs.edit().putBoolean("sync.auto", on).apply(); sendState(); }
+        @JavascriptInterface public void syncSaves() {
+            if (prefs.getString("sync.folder", "").isEmpty()) { toast("Choose a sync folder first."); return; }
+            MainActivity.this.syncSaves(false);
+        }
         @JavascriptInterface public void importMedia() {
             runOnUiThread(() -> {
                 Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);

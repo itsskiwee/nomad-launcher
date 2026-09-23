@@ -70,6 +70,7 @@
    <button data-section="library" class="active">Library</button>
    <button data-section="artwork">Artwork</button>
    <button data-section="theme">Theme</button>
+   <button data-section="saves">Saves</button>
    <button data-section="music">Music</button>
    <button data-section="playtime">Playtime</button>
    <button data-section="battery">Battery</button>
@@ -129,6 +130,26 @@
     <div class="rows">
      <button class="row" id="blackWallpaper"><span>Set phone wallpaper to black<small>Keeps transitions seamless</small></span><i class="chev"></i></button>
     </div>
+   </section>
+
+   <section data-section="saves">
+    <h2>Sync folder</h2>
+    <div class="rows">
+     <div class="row"><button class="row-main" id="syncFolder"><span>Sync folder</span><small id="syncFolderName"></small></button><button class="remove" id="clearSyncFolder" aria-label="Stop syncing saves" hidden></button></div>
+    </div>
+    <p class="hint">Saves are copied to “Nomad Saves” in this folder. Point a Syncthing or cloud-drive folder at it and every device running Nomad shares the same progress.</p>
+    <h2>Save folders</h2>
+    <div class="rows" id="saveRows"></div>
+    <div class="rows">
+     <button class="row" id="findSaves"><span>Find emulator saves<small>PPSSPP, DuckStation, NetherSX2, RetroArch, Dolphin… (uses root for Android/data)</small></span><i class="chev"></i></button>
+     <button class="row" id="addSaveFolder"><span>Add save folder…</span><i class="chev"></i></button>
+    </div>
+    <h2>Sync</h2>
+    <div class="rows">
+     <button class="row" id="saveAutoToggle" role="switch" aria-checked="true"><span>Sync automatically<small>When Nomad starts and after each game</small></span><i class="switch"></i></button>
+     <button class="row" id="syncNow"><span>Sync now<small id="syncStatus"></small></span><i class="chev"></i></button>
+    </div>
+    <p class="hint">The newer copy of each save wins. Nothing is deleted, and a save replaced by a newer one from another device is kept in Nomad Saves/…/.previous. Close the emulator before syncing.</p>
    </section>
 
    <section data-section="music">

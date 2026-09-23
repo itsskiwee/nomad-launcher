@@ -903,6 +903,42 @@ function renderSettings() {
   $('homeSettingText').textContent = state.defaultHome ? 'Nomad is the default' : 'Set Nomad as default';
   $('versionText').textContent = state.version || '';
   renderMusicSettings();
+  renderSaves();
+}
+function timeAgo(ms) {
+  const m = Math.round((Date.now() - ms) / 60000);
+  return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+}
+function renderSaves() {
+  const saves = state.saves || { sets: [] };
+  $('syncFolderName').textContent = saves.folder || 'Choose a folder';
+  $('clearSyncFolder').hidden = !saves.folder;
+  const rows = $('saveRows');
+  rows.replaceChildren();
+  saves.sets.forEach(set => {
+    const row = document.createElement('div');
+    row.className = 'row';
+    const label = document.createElement('span');
+    const name = document.createElement('span'); name.textContent = set.label;
+    const where = document.createElement('small'); where.textContent = set.where;
+    label.append(name, where);
+    const remove = document.createElement('button');
+    remove.className = 'remove';
+    remove.innerHTML = icon('close');
+    remove.setAttribute('aria-label', 'Stop syncing ' + set.label);
+    remove.onclick = () => native('removeSaveSet', set.label);
+    row.append(label, remove);
+    rows.append(row);
+  });
+  if (!saves.sets.length) {
+    const p = document.createElement('p'); p.className = 'hint';
+    p.textContent = 'No save folders yet.';
+    rows.append(p);
+  }
+  $('findSaves').hidden = !state.rootFeatures;
+  $('saveAutoToggle').setAttribute('aria-checked', String(saves.auto !== false));
+  $('syncNow').disabled = !!saves.syncing;
+  $('syncStatus').textContent = saves.syncing ? 'Syncing…' : saves.last ? `${saves.status} · ${timeAgo(saves.last)}` : 'Not synced yet';
 }
 function renderArtworkRows() {
   const rows = $('artworkRows');
@@ -951,6 +987,13 @@ $('addFolderSetting').onclick = () => native('chooseFolder');
 $('autoArtToggle').onclick = () => native('setAutoArt', state.autoArt === false);
 $('findCovers').onclick = () => { native('findCovers'); notify('Looking for covers…'); };
 $('importMedia').onclick = () => native('importMedia');
+$('syncFolder').onclick = () => native('chooseSyncFolder');
+$('clearSyncFolder').innerHTML = icon('close');
+$('clearSyncFolder').onclick = () => native('clearSyncFolder');
+$('addSaveFolder').onclick = () => native('addSaveFolder');
+$('findSaves').onclick = () => native('findSaveFolders');
+$('saveAutoToggle').onclick = () => native('setSaveAuto', !(state.saves && state.saves.auto !== false));
+$('syncNow').onclick = () => native('syncSaves');
 $('previewsToggle').onclick = () => { previewsOn = !previewsOn; prefs.set('previews', previewsOn); renderSettings(); updatePreview(); };
 $('rescanSetting').onclick = () => native('refresh');
 $('hiddenGames').onclick = e => {
