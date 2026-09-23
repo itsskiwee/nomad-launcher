@@ -82,7 +82,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     private final Handler timer = new Handler(Looper.getMainLooper());
     private volatile boolean scanning = false;
     private volatile String scanMessage = "";
-    private JSONArray apps = new JSONArray();
+    private volatile JSONArray apps = new JSONArray();
     private boolean appsLoaded;
     private String pendingCoverId = "";
     private volatile boolean webGone;
@@ -112,12 +112,12 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 pageAskedAt = pageAnsweredAt = 0;
                 web.reload();
             }
-            sendState();
+            sendStatus();
             timer.postDelayed(this, 15000L);
         }
     };
     private final BroadcastReceiver batteryReceiver = new BroadcastReceiver() {
-        @Override public void onReceive(Context context, Intent intent) { batteryTracker.sample(intent); sendState(); }
+        @Override public void onReceive(Context context, Intent intent) { batteryTracker.sample(intent); sendStatus(); }
     };
 
     @Override
@@ -188,6 +188,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                         String name = path.substring(5);
                         if (name.matches("themes/[a-z0-9-]+\\.mp4") || name.matches("[a-f0-9]{24}-video\\.mp4")) return ThemeBridge.video(new File(artDir, name), request);
                         if (!name.matches("[a-zA-Z0-9_-]+\\.(jpg|png)")) throw new IOException();
+                        if (name.matches("[a-zA-Z0-9_-]+-(cover|box)-t\\.jpg")) {
+                            try { return response("image/jpeg", new FileInputStream(thumbnail(name))); }
+                            catch (Exception e) { Log.w("PocketDeck", "Thumbnail " + name, e); throw e; }
+                        }
                         String type = name.endsWith("png") ? "image/png" : "image/jpeg";
                         return response(type, new FileInputStream(new File(artDir, name)));
                     }
@@ -201,7 +205,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
 
             @Override
-            public void onPageFinished(WebView view, String url) { pageAskedAt = pageAnsweredAt = 0; view.requestFocus(); sendState(); sendMedia(); }
+            public void onPageFinished(WebView view, String url) { pageAskedAt = pageAnsweredAt = 0; view.requestFocus(); resendLibrary(); sendMedia(); }
 
             /** The renderer was killed (memory pressure) or crashed; rebuild the page instead of letting the app die. */
             @Override
@@ -291,6 +295,40 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             Log.w("PocketDeck", "Wallpaper", e);
             return false;
         }
+    }
+
+    /**
+     * A 400 px wide copy of a cover for tiles and the cover row ("<key>-cover-t.jpg" for
+     * "<key>-cover.jpg"). Covers are kept at up to 1200 px; decoding those for 130 px tiles cost
+     * about 10 MB each in the renderer. Made on first request, remade when the cover changes.
+     */
+    private File thumbnail(String name) throws IOException {
+        File source = new File(artDir, name.replace("-t.jpg", ".jpg"));
+        File dir = new File(getCacheDir(), "thumbs");
+        File thumb = new File(dir, name);
+        if (thumb.exists() && thumb.lastModified() >= source.lastModified()) return thumb;
+        if (!source.exists()) throw new IOException("No cover " + source.getName());
+        dir.mkdirs();
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        BitmapFactory.decodeFile(source.getPath(), bounds);
+        if (bounds.outWidth <= 0) throw new IOException("Unreadable cover " + source.getName());
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = 1;
+        while (bounds.outWidth / (opts.inSampleSize * 2) >= 400) opts.inSampleSize *= 2;
+        Bitmap bitmap = BitmapFactory.decodeFile(source.getPath(), opts);
+        if (bitmap == null) throw new IOException("Unreadable cover " + source.getName());
+        if (bitmap.getWidth() > 400) {
+            Bitmap scaled = Bitmap.createScaledBitmap(bitmap, 400, Math.round(bitmap.getHeight() * 400f / bitmap.getWidth()), true);
+            bitmap.recycle();
+            bitmap = scaled;
+        }
+        // Several WebView threads can ask at once; each writes its own file and the rename wins.
+        File temp = new File(dir, name + "." + Thread.currentThread().getId() + ".part");
+        try (FileOutputStream out = new FileOutputStream(temp)) { bitmap.compress(Bitmap.CompressFormat.JPEG, 86, out); }
+        finally { bitmap.recycle(); }
+        if (!temp.renameTo(thumb)) temp.delete();
+        return thumb;
     }
 
     private WebResourceResponse empty() { return response("text/plain", new ByteArrayInputStream(new byte[0])); }
@@ -440,6 +478,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         unregisterReceiver(batteryReceiver);
         media.stop();
         worker.shutdownNow();
+        stateWorker.shutdownNow();
         artWorker.shutdownNow();
         saveWorker.shutdownNow();
         if (!webGone) {
@@ -459,13 +498,26 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         try { return new JSONArray(prefs.getString("games", "[]")); } catch (Exception e) { return new JSONArray(); }
     }
 
+    /** Games by id, parsed once per saved library rather than once per lookup (every bridge call does one). */
+    private volatile Map<String, JSONObject> gameIndex = new HashMap<>();
+    private volatile String gameIndexSource;
+
     private JSONObject findGame(String id) {
-        JSONArray all = games();
-        for (int i = 0; i < all.length(); i++) {
-            JSONObject g = all.optJSONObject(i);
-            if (g != null && id.equals(g.optString("id"))) return g;
+        String raw = prefs.getString("games", "[]");
+        Map<String, JSONObject> index = gameIndex;
+        if (raw != gameIndexSource) {   // SharedPreferences hands back the same String until it changes
+            index = new HashMap<>();
+            try {
+                JSONArray all = new JSONArray(raw);
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject g = all.optJSONObject(i);
+                    if (g != null) index.put(g.optString("id"), g);
+                }
+            } catch (Exception ignored) { }
+            gameIndex = index;
+            gameIndexSource = raw;
         }
-        return null;
+        return index.get(id);
     }
 
     private List<String> folders() {
@@ -516,74 +568,127 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         return id.startsWith("app:") ? "app-" + hash(id.substring(4)) : id;
     }
 
+    // ---- state for the page ----
+    // The page gets two kinds of snapshot. Status (battery, network, sync progress, settings facts)
+    // is small and goes out on every tick. The library (games, apps, folders, systems) is rebuilt
+    // off the UI thread only after something marks it dirty, and sent only when it really changed:
+    // with thousands of games it is megabytes of JSON that the page would otherwise re-render.
+
+    private final ExecutorService stateWorker = Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.atomic.AtomicBoolean stateQueued = new java.util.concurrent.atomic.AtomicBoolean();
+    private volatile boolean libraryDirty = true;
+    private volatile String sentLibrary = "";
+    /** Art file name -> last modified, listed once per library build instead of three stats per game. */
+    private Map<String, Long> artFiles = new HashMap<>();
+
+    /** Something about the library may have changed: rebuild it, and send it if it did. */
     private void sendState() {
-        runOnUiThread(() -> {
+        libraryDirty = true;
+        queueState();
+    }
+
+    /** Only status changed (clock tick, battery). */
+    private void sendStatus() { queueState(); }
+
+    /** Calls in a burst (a scan finishing, several preference writes) collapse into one build. */
+    private void queueState() {
+        if (!stateQueued.compareAndSet(false, true) || stateWorker.isShutdown()) return;
+        stateWorker.execute(() -> {
+            stateQueued.set(false);
             try {
-                JSONArray games = games();
-                for (int i = 0; i < games.length(); i++) {
-                    JSONObject g = games.getJSONObject(i);
-                    decorate(g, g.getString("id"));
-                    g.put("fpsPatch", fpsPatchState(g));
-                    g.put("emuChoice", prefs.getString("emu.game." + g.getString("id"), ""));
-                    g.put("wsPatch", wsPatchState(g));
-                    if (prefs.getBoolean("hidden." + g.getString("id"), false)) g.put("hidden", true);
-                    String title = prefs.getString("title." + g.getString("id"), null);
-                    if (title != null) g.put("title", title);
-                    File clip = new File(artDir, g.getString("id") + "-video.mp4");
-                    if (clip.exists()) g.put("video", clip.getName() + "?v=" + clip.lastModified());
-                    String[] ra = prefs.getString("ra.p." + g.getString("id"), "").split("/");
-                    if (ra.length == 3 && prefs.contains("ra.game." + g.getString("id"))) {
-                        g.put("achievements", new JSONObject().put("got", Integer.parseInt(ra[0])).put("total", Integer.parseInt(ra[1])).put("hardcore", Integer.parseInt(ra[2])));
+                JSONObject state = statusState();
+                if (libraryDirty) {
+                    libraryDirty = false;
+                    JSONObject library = libraryState();
+                    String json = library.toString(), key = json.length() + ":" + json.hashCode();
+                    if (!key.equals(sentLibrary)) {
+                        state.put("library", library).put("libraryHash", key);
+                        sentLibrary = key;
                     }
                 }
-                foldVersions(games);
-                JSONArray appList = new JSONArray();
-                for (int i = 0; i < apps.length(); i++) {
-                    JSONObject a = new JSONObject(apps.getJSONObject(i).toString());
-                    String id = "app:" + a.getString("package");
-                    a.put("id", id);
-                    decorate(a, id);
-                    appList.put(a);
-                }
-                JSONArray folderList = new JSONArray();
-                for (String uri : folders()) folderList.put(new JSONObject().put("uri", uri).put("name", folderName(uri)));
-
-                JSONObject state = new JSONObject();
-                state.put("games", games);
-                state.put("apps", appList);
-                state.put("folders", folderList);
-                state.put("scanning", scanning);
-                state.put("appsLoaded", appsLoaded);
-                state.put("scanMessage", scanMessage);
-                state.put("hasFolder", !folders().isEmpty());
-                Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-                int level = battery == null ? -1 : battery.getIntExtra("level", -1);
-                int scale = battery == null ? 100 : Math.max(1, battery.getIntExtra("scale", 100));
-                state.put("battery", level >= 0 ? Math.round(level * 100f / scale) : -1);
-                state.put("charging", battery != null && battery.getIntExtra("plugged", 0) != 0);
-                state.put("batteryStats", batteryTracker.snapshot(this, battery));
-                state.put("usageAccess", playTracker.enabled());
-                state.put("network", networkName());
-                state.put("systems", systemsState(games));
-                state.put("emulatorPackages", new JSONArray(Systems.emulatorPackages()));
-                state.put("defaultHome", defaultHome);
-                File wallpaper = new File(artDir, "wallpaper.jpg");
-                state.put("wallpaper", wallpaper.exists() ? "wallpaper.jpg?v=" + wallpaper.lastModified() : "");
-                state.put("mediaAccess", media.enabled());
-                state.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
-                state.put("rootFeatures", Root.enabled(this));
-                state.put("autoArt", prefs.getBoolean("autoArt", true));
-                state.put("saves", savesState());
-                state.put("secondScreen", new JSONObject().put("enabled", prefs.getBoolean("secondScreen", true)).put("present", secondScreen.present()));
-                state.put("retroAchievements", new JSONObject().put("user", prefs.getString("ra.user", ""))
-                    .put("connected", !prefs.getString("ra.key", "").isEmpty()).put("status", raStatus));
-                if (webGone) return;
-                pageAskedAt = System.currentTimeMillis();
-                web.evaluateJavascript("window.receiveState && window.receiveState(" + state + ")", value -> pageAnsweredAt = System.currentTimeMillis());
+                String payload = "window.receiveState && window.receiveState(" + state + ")";
+                runOnUiThread(() -> {
+                    if (webGone) return;
+                    pageAskedAt = System.currentTimeMillis();
+                    web.evaluateJavascript(payload, value -> pageAnsweredAt = System.currentTimeMillis());
+                });
             } catch (Exception e) {
                 Log.e("PocketDeck", "State update", e);
             }
         });
+    }
+
+    /** A fresh page has no library yet; the next snapshot must carry it. */
+    private void resendLibrary() {
+        sentLibrary = "";
+        sendState();
+    }
+
+    private JSONObject libraryState() throws Exception {
+        Map<String, Long> files = new HashMap<>();
+        File[] list = artDir.listFiles();
+        if (list != null) for (File f : list) files.put(f.getName(), f.lastModified());
+        artFiles = files;
+        JSONArray games = games();
+        for (int i = 0; i < games.length(); i++) {
+            JSONObject g = games.getJSONObject(i);
+            String id = g.getString("id");
+            decorate(g, id);
+            g.put("fpsPatch", fpsPatchState(g));
+            g.put("emuChoice", prefs.getString("emu.game." + id, ""));
+            g.put("wsPatch", wsPatchState(g));
+            if (prefs.getBoolean("hidden." + id, false)) g.put("hidden", true);
+            String title = prefs.getString("title." + id, null);
+            if (title != null) g.put("title", title);
+            Long clip = files.get(id + "-video.mp4");
+            if (clip != null) g.put("video", id + "-video.mp4?v=" + clip);
+            String[] ra = prefs.getString("ra.p." + id, "").split("/");
+            if (ra.length == 3 && prefs.contains("ra.game." + id)) {
+                g.put("achievements", new JSONObject().put("got", Integer.parseInt(ra[0])).put("total", Integer.parseInt(ra[1])).put("hardcore", Integer.parseInt(ra[2])));
+            }
+        }
+        foldVersions(games);
+        JSONArray appList = new JSONArray();
+        JSONArray installed = apps;
+        for (int i = 0; i < installed.length(); i++) {
+            JSONObject a = new JSONObject(installed.getJSONObject(i).toString());
+            String id = "app:" + a.getString("package");
+            a.put("id", id);
+            decorate(a, id);
+            appList.put(a);
+        }
+        JSONArray folderList = new JSONArray();
+        for (String uri : folders()) folderList.put(new JSONObject().put("uri", uri).put("name", folderName(uri)));
+        return new JSONObject().put("games", games).put("apps", appList).put("folders", folderList)
+            .put("systems", systemsState(games)).put("emulatorPackages", new JSONArray(Systems.emulatorPackages()));
+    }
+
+    private JSONObject statusState() throws Exception {
+        JSONObject state = new JSONObject();
+        state.put("scanning", scanning);
+        state.put("appsLoaded", appsLoaded);
+        state.put("scanMessage", scanMessage);
+        state.put("hasFolder", !folders().isEmpty());
+        Intent battery = registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
+        int level = battery == null ? -1 : battery.getIntExtra("level", -1);
+        int scale = battery == null ? 100 : Math.max(1, battery.getIntExtra("scale", 100));
+        state.put("battery", level >= 0 ? Math.round(level * 100f / scale) : -1);
+        state.put("charging", battery != null && battery.getIntExtra("plugged", 0) != 0);
+        state.put("batteryStats", batteryTracker.snapshot(this, battery));
+        state.put("usageAccess", playTracker.enabled());
+        state.put("network", networkName());
+        state.put("defaultHome", defaultHome);
+        File wallpaper = new File(artDir, "wallpaper.jpg");
+        state.put("wallpaper", wallpaper.exists() ? "wallpaper.jpg?v=" + wallpaper.lastModified() : "");
+        state.put("mediaAccess", media.enabled());
+        state.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+        state.put("rootFeatures", Root.enabled(this));
+        state.put("autoArt", prefs.getBoolean("autoArt", true));
+        state.put("saves", savesState());
+        state.put("secondScreen", new JSONObject().put("enabled", prefs.getBoolean("secondScreen", true)).put("present", secondScreen.present()));
+        state.put("retroAchievements", new JSONObject().put("user", prefs.getString("ra.user", ""))
+            .put("connected", !prefs.getString("ra.key", "").isEmpty()).put("status", raStatus));
+        return state;
     }
 
     /** The favorite/lastPlayed/playtime/cover fields shared by a game and an app card. */
@@ -597,13 +702,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         item.put("customCover", item.optString("cover").contains("-cover.jpg"));
     }
 
-    /** The user's own cover, else downloaded box art. */
+    /** The user's own cover, else downloaded box art (from the listing taken for this build). */
     private String coverFor(String id) {
         try {
             for (String suffix : new String[] { "-cover.jpg", "-box.jpg" }) {
                 String name = artKey(id) + suffix;
-                File f = new File(artDir, name);
-                if (f.exists()) return name + "?v=" + f.lastModified();
+                Long modified = artFiles.get(name);
+                if (modified != null) return name + "?v=" + modified;
             }
         } catch (Exception ignored) { }
         return "";
@@ -1442,7 +1547,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             prefs.edit().putBoolean("rootFeatures", enabled).apply();
             sendState();
         }
-        @JavascriptInterface public void ready() { sendState(); sendMedia(); }
+        @JavascriptInterface public void ready() { resendLibrary(); sendMedia(); }
         /** Internal storage totals plus what the launcher itself keeps (artwork, video themes). */
         @JavascriptInterface public String storage() {
             try {

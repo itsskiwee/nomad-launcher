@@ -307,6 +307,8 @@ nav button.active { color: var(--text); font-weight: 600; }
 }
 .library-grid::-webkit-scrollbar { display: none; }
 .game-tile { position: relative; min-width: 0; text-align: left; }
+/* Tiles outside the viewport skip layout and paint; the placeholder size keeps scrolling steady. */
+.library-grid .game-tile { content-visibility: auto; contain-intrinsic-size: auto 104px auto 230px; }
 .game-tile-play { display: block; width: 100%; min-width: 0; text-align: left; }
 .game-tile .cover { width: 100%; }
 .game-tile.selected .cover { outline: 2px solid rgba(255, 255, 255, .92); outline-offset: 2px; }

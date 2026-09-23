@@ -50,14 +50,24 @@ function notify(message) {
 function artUrl(name) {
   return name && /^[a-zA-Z0-9_-]+\.(jpg|png)(\?v=\d+)?$/.test(name) ? '/art/' + name : '';
 }
+// Covers at tile size: native serves a 400 px copy of "<key>-cover.jpg" as "<key>-cover-t.jpg".
+function thumbUrl(name) {
+  return artUrl(name && name.replace(/^([a-zA-Z0-9_]+-(?:cover|box))\.jpg/, '$1-t.jpg'));
+}
 
-// PSP games and installed Android games share one library shape.
+// PSP games and installed Android games share one library shape. The list is rebuilt only when
+// a new library arrives (or the Android-games switch flips): current() and friends call it often.
+let allCache = null, allKey = '';
 function allGames() {
+  const key = signature + '|' + androidGames;
+  if (allCache && allKey === key && signature) return allCache.slice();
   const psp = state.games.filter(g => !g.alt && !g.hidden).map(g => ({ ...g, android: false }));
   const apps = androidGames ? state.apps
     .map(a => ({ ...a, android: true }))
     .filter(a => a.game && !isEmulator(a)) : [];
-  return psp.concat(apps);
+  allCache = psp.concat(apps);
+  allKey = key;
+  return allCache.slice();
 }
 // Emulators never appear in the game library; they stay reachable in Apps and Settings.
 const isEmulator = g => g.android && (state.emulatorPackages || []).includes(g.package);
@@ -145,7 +155,7 @@ function updateBackdrop() {
   if (mode !== 'art' && mode !== 'custom') return showBackdrop('');
   if (backgroundMode === 'custom') return showBackdrop(state.wallpaper ? artUrl(state.wallpaper) : '');
   const game = current();
-  const src = game ? artUrl(game.cover || game.background || game.icon) : '';
+  const src = game ? (game.cover ? thumbUrl(game.cover) : artUrl(game.background || game.icon)) : '';
   if (!src) return showBackdrop('');
   ambient(src, url => { if (backgroundMode === 'art' && selected === game.id) showBackdrop(url); });
 }
@@ -361,7 +371,7 @@ function syncTheme() {
   switch (backgroundMode) {
     case 'art': {
       const game = current();
-      const src = game ? artUrl(game.cover || game.background || game.icon) : '';
+      const src = game ? (game.cover ? thumbUrl(game.cover) : artUrl(game.background || game.icon)) : '';
       if (!src) return applyAccent('', 'No artwork to follow yet.');
       return ambient(src, (url, accent) => { if (themeName === 'auto' && backgroundMode === 'art' && selected === game.id) applyAccent(accent, 'Following the selected game’s artwork.'); });
     }
@@ -427,10 +437,10 @@ $('addThemeButton').onclick = () => {
 function coverEl(game) {
   const el = document.createElement('div');
   el.className = 'cover';
-  const cover = artUrl(game.cover);
+  const cover = thumbUrl(game.cover);
   if (cover) {
     const img = document.createElement('img');
-    img.src = cover; img.alt = ''; img.loading = 'lazy';
+    img.src = cover; img.alt = ''; img.loading = 'lazy'; img.decoding = 'async';
     el.append(img);
   } else if (game.android || artUrl(game.icon)) {
     const box = document.createElement('div');
@@ -594,8 +604,26 @@ $('homeFavorites').addEventListener('touchcancel', () => { favoritesSwipe = null
 $('homePages').addEventListener('scroll', () => { closeGameMenu(); updatePreview(); }, { passive: true });
 
 // ---- library ----
+// Tiles are added 60 at a time as the grid scrolls (or the controller moves past the last row),
+// so a library of thousands opens as fast as a small one. Off-screen tiles skip layout and paint.
+const LIBRARY_CHUNK = 60;
+let libraryItems = [], libraryShown = 0;
+function appendLibrary(count) {
+  const grid = $('libraryGrid'), end = Math.min(libraryItems.length, libraryShown + count);
+  if (libraryShown >= end) return false;
+  const batch = document.createDocumentFragment();
+  for (let i = libraryShown; i < end; i++) batch.append(gameTile(libraryItems[i]));
+  grid.append(batch);
+  libraryShown = end;
+  return true;
+}
+$('libraryGrid').addEventListener('scroll', () => {
+  const g = $('libraryGrid');
+  if (g.scrollTop + g.clientHeight > g.scrollHeight - 900) appendLibrary(LIBRARY_CHUNK);
+}, { passive: true });
 function renderLibrary() {
-  const grid = $('libraryGrid'), scroll = grid.scrollTop;
+  if (page !== 'library') return;   // goPage('library') renders it when it is shown
+  const grid = $('libraryGrid'), scroll = grid.scrollTop, before = libraryShown;
   grid.replaceChildren();
   const search = $('search').value.trim().toLowerCase();
   const all = allGames();
@@ -603,7 +631,9 @@ function renderLibrary() {
     .filter(g => (!favoriteOnly || g.favorite) && g.title.toLowerCase().includes(search))
     .sort((a, b) => a.title.localeCompare(b.title));
   $('gameCount').textContent = all.length ? `${all.length} game${all.length === 1 ? '' : 's'}` : '';
-  games.forEach(g => grid.append(gameTile(g)));
+  libraryItems = games;
+  libraryShown = 0;
+  appendLibrary(Math.max(LIBRARY_CHUNK, before));
   if (!games.length) {
     grid.append(all.length
       ? empty(search ? 'No matches' : 'No favorites yet', search ? 'Try a different title.' : 'Open a game’s ⋯ menu and choose Add to favorites.')
@@ -657,16 +687,22 @@ $('npLaunch').innerHTML = icon('music') + 'Spotify';
 $('npLaunch').onclick = () => native('media', 'open');
 
 // ---- state from native ----
+// Native sends status on every tick and the library only when it changed (next.library, with a
+// hash). A flat snapshot that carries games itself (the browser tests) counts as a library too.
 window.receiveState = next => {
-  state = next;
+  const library = next.library || (next.games ? next : null);
+  state = { ...state, ...next, ...(library || {}) };
+  delete state.library;
   $('powerButton').hidden = !state.rootFeatures;
   $('rootFeaturesToggle').setAttribute('aria-checked', String(!!state.rootFeatures));
-  const sig = JSON.stringify(state.games) + JSON.stringify(state.apps), appSig = JSON.stringify(state.apps);
-  if (sig !== signature || !signature) {
-    signature = sig;
-    renderHome(); renderLibrary();
+  if (library) {
+    const sig = next.libraryHash || JSON.stringify(library.games) + JSON.stringify(library.apps), appSig = JSON.stringify(library.apps);
+    if (sig !== signature || !signature) {
+      signature = sig;
+      renderHome(); renderLibrary();
+    }
+    if (appSig !== appSignature) { appSignature = appSig; renderApps(); }
   }
-  if (appSig !== appSignature) { appSignature = appSig; renderApps(); }
   if (backgroundMode === 'custom') updateBackdrop();
   settleBoot();
 
@@ -980,7 +1016,7 @@ function renderArtworkRows() {
     label.className = 'art-label';
     const thumb = document.createElement('img');
     thumb.className = 'thumb'; thumb.alt = '';
-    thumb.src = artUrl(g.cover || g.icon);
+    thumb.src = g.cover ? thumbUrl(g.cover) : artUrl(g.icon);
     const name = document.createElement('b');
     name.textContent = g.title;
     label.append(thumb, name);
@@ -1382,6 +1418,7 @@ window.deckInput = btn => {
     // cross over only when nothing is left in that direction.
     const zone = scopes.find(s => s.contains(el)), other = scopes.find(s => s !== zone);
     let next = nearest(el, btn, padTargets(zone));
+    if (!next && page === 'library' && (btn === 'down' || btn === 'right') && appendLibrary(LIBRARY_CHUNK)) next = nearest(el, btn, padTargets(zone));
     if (!next && (btn === 'up' || btn === 'down')) next = btn === 'down' && zone === scopes[0] ? entryPoint() : nearest(el, btn, padTargets(other));
     if (next) focusEl(next);
     return;
