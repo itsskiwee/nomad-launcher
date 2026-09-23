@@ -19,27 +19,56 @@ claim that every OS/WebView/emulator combination has been tested.
 
 ## Emulator integrations
 
-| Folder | Launch target | Notes |
-| --- | --- | --- |
-| PSP | PPSSPP / PPSSPP Gold | ISO, CSO, CHD, PBP; emulator determines format support |
-| PS1 / PSX | DuckStation | `com.github.stenzek.duckstation` |
-| PS2 | NetherSX2 / compatible AetherSX2 package | `xyz.aethersx2.android` |
-| N64 | M64Plus FZ | `org.mupen64plusae.v3.fzurita` |
-| SNES | RetroArch / snes9x | Requires matching installed core |
-| NES | RetroArch / fceumm | Requires matching installed core |
-| GBA | RetroArch / mgba | Requires matching installed core |
-| GB / GBC | RetroArch / gambatte | Requires matching installed core |
-| Genesis / MD | RetroArch / genesis_plus_gx | Requires matching installed core |
-| 32X | RetroArch / picodrive | Requires matching installed core |
-| NDS | RetroArch / melondsds | Requires matching installed core |
-| Dreamcast / DC | RetroArch / flycast | Requires matching installed core |
-| Arcade / FBNeo | RetroArch / fbneo | Requires compatible ROM set |
-| PCE | RetroArch / mednafen_pce_fast | Requires matching installed core |
+Each system lists the emulators that can play it. Nomad uses the first one that is
+installed unless you choose another for the whole system (Settings → Library →
+Emulators) or for one game (its ⋯ menu → Play with). Launch intents follow the ones
+ES-DE ships for Android.
 
-RetroArch integration targets `com.retroarch.aarch64`. Folder aliases and accepted
-extensions are defined in `Systems.java`. Emulator detection does not guarantee
-that a game format is supported by the installed emulator version. Games, BIOS
-files, and cores must be supplied and configured separately.
+| Folder names | System | Emulators, in automatic order |
+| --- | --- | --- |
+| psp (and unlabelled folders) | PSP | PPSSPP / Gold, RetroArch (ppsspp) |
+| ps1, psx | PlayStation | DuckStation, RetroArch (swanstation, pcsx_rearmed) |
+| ps2 | PlayStation 2 | NetherSX2 / AetherSX2, ARMSX2 |
+| n64 | Nintendo 64 | M64Plus FZ, Mupen64Plus AE, RetroArch (mupen64plus_next_gles3) |
+| gc, gamecube | GameCube | Dolphin, Dolphin MMJR |
+| wii | Wii | Dolphin, Dolphin MMJR |
+| 3ds, n3ds | Nintendo 3DS | Azahar / Lime3DS, AzaharPlus, Citra |
+| nds, ds | Nintendo DS | melonDS, DraStic, RetroArch (melondsds) |
+| switch | Switch | Eden, Kenji-NX |
+| vita, psvita | PlayStation Vita | Vita3K (`.psvita` files holding a title id) |
+| snes, sfc | Super Nintendo | RetroArch (snes9x), Snes9x EX+ |
+| nes, famicom | NES | RetroArch (fceumm) |
+| gba | Game Boy Advance | RetroArch (mgba), My Boy! |
+| gb, gbc | Game Boy / Color | RetroArch (gambatte) |
+| genesis, megadrive, md | Genesis | RetroArch (genesis_plus_gx) |
+| 32x, sega32x | 32X | RetroArch (picodrive) |
+| saturn | Saturn | Yaba Sanshiro 2 |
+| dreamcast, dc | Dreamcast | Flycast, Redream, RetroArch (flycast) |
+| arcade, fbneo, mame | Arcade | RetroArch (fbneo) |
+| pce, pcengine, tg16 | PC Engine | RetroArch (mednafen_pce_fast) |
+| windows, winlator | Windows | Winlator Cmod, Winlator (`.desktop` shortcuts) |
+
+RetroArch choices require the named core to be installed. Folder aliases, accepted
+extensions and launch styles are defined in `Systems.java`. Launches were verified
+on the primary device with PPSSPP, DuckStation, NetherSX2, M64Plus FZ and RetroArch;
+the other intents come from ES-DE's definitions and need community confirmation.
+Games, BIOS files and cores must be supplied and configured separately.
+
+## Library tidying
+
+Discs listed in an `.m3u` and the tracks of a `.cue`/`.gdi` are hidden behind their
+playlist or cue sheet. A disc set without a playlist shows once and plays disc 1.
+Versions of the same game in one system fold into one entry (a chosen version, else
+USA, World, Europe, then others). BIOS files and folders such as `bios`, `saves`,
+`states`, `media` and `downloaded_media` are skipped. Up to 3,000 games are scanned.
+
+## Controllers
+
+Gamepad buttons, D-pads, hat switches and the left stick navigate the interface:
+A plays or presses, B goes back, X/Start opens a game's menu, Y favorites, L1/R1
+switch pages (sections in Settings), Select opens Settings. Keyboards work with the
+arrow keys, Enter and Escape. Tested with Android's injected gamepad events; physical
+controller reports are welcome.
 
 ## Root features
 
@@ -57,13 +86,23 @@ device installs retain their previous root behavior when upgrading.
   Active playback, visible windows, and missing diagnostic data skip cleanup.
 - PPSSPP integration may write `PauseMenuExitsEmulator = True` to supported config
   locations so exiting a game returns to the launcher.
+- PS2 widescreen patches: for discs with a patch in NetherSX2's own widescreen
+  database, launching sets NetherSX2's `EmuCore/EnableWideScreenPatches` preference
+  to the game's choice. The file is rewritten in place (owner and SELinux label kept),
+  through Magisk's global mount namespace (`su -t 1`) because Android hides other
+  apps' data from Nomad's own.
+- Save sync can read and write emulator save folders under `Android/data` (see
+  Settings → Saves → Find emulator saves). Files are written through `/storage` so
+  the emulator keeps owning them.
 
 The Magisk module under `device/` is a separate experimental device customization.
 It is not included in or installed by the normal APK installation flow.
 
 ## Known limits
 
-Controller navigation, text scaling, large libraries, cloud document providers,
-and more emulator/package variants need additional work. Non-PSP games do not have
-automatic embedded artwork extraction. Root performance profiles are not portable
+Text scaling, cloud document providers and more emulator/package variants need
+additional work. RetroAchievements matching covers cartridge systems, arcade and PSP
+ISOs; PS1/PS2/NDS/GameCube hashing is not implemented. PS2 widescreen detection reads
+plain ISOs only (not CHD/CSO/GZ). Second-screen support was tested with Android's
+simulated overlay display, not yet on dual-screen hardware. Root performance profiles are not portable
 to other chips by changing a device name. See [the roadmap](../ROADMAP.md).

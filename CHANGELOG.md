@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+- Controller navigation everywhere: D-pad, hat switches, left stick and face/shoulder
+  buttons; the first press after a touch or launch is never lost.
+- Emulator catalogue with automatic setup: 21 systems, per-system and per-game emulator
+  choice, and new systems GameCube, Wii, 3DS, Vita, Switch, Saturn and Windows (Winlator).
+  ES-DE folder names are recognised.
+- Automatic box art from libretro-thumbnails, matched by No-Intro/Redump name or title.
+- Tidy library: playlists, cue sheets and disc sets fold into one entry, regional versions
+  group with a version chooser, BIOS/data folders are skipped, games can be hidden, and
+  scans no longer re-parse the library for every file (limit raised to 3,000 games).
+- Import covers, videos, titles, favorites and hidden flags from ES-DE or Skraper media.
+- Game preview clips on Home.
+- Save sync between devices through a shared folder, with root discovery of emulator saves.
+- RetroAchievements progress in each game's menu.
+- PS2 widescreen patches through NetherSX2's own database (root).
+- Second-screen presentation for dual-screen handhelds.
+
 ## 0.3.1.1 — 2026-09-22
 
 - Show measured net battery power in watts, with charging/discharging direction.

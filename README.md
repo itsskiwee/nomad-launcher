@@ -37,7 +37,19 @@ binaries, commercial cover art, BIOS files, and video themes are not bundled.
 - **Cover-first Home.** Most-played games up front; tap to select, tap again to launch.
 - **Swipeable Favorites.** Swipe up from Home for your favorites and down to return.
 - **Searchable library.** Android games and ROM folders together, with explicit game menus.
-- **Emulator handoff.** PPSSPP, DuckStation, NetherSX2, M64Plus FZ, and RetroArch integrations.
+- **Controller first.** D-pad, sticks and face buttons drive every screen; touch still works.
+- **Emulators set themselves up.** Nomad picks an installed emulator for each of 21 systems
+  (PSP, PS1, PS2, N64, GameCube, Wii, 3DS, DS, Switch, Vita, Windows via Winlator, and the
+  RetroArch classics); choose another per system or per game.
+- **Covers without effort.** Box art downloads from libretro-thumbnails; your own always wins.
+- **Tidy library.** Multi-disc sets, cue sheets and regional versions show as one game;
+  BIOS files and data folders stay out; hide anything else.
+- **Bring your ES-DE library.** Import covers, preview videos, titles and favorites.
+- **Video previews.** A game's clip plays behind Home while it is selected.
+- **Save sync.** Two-way, newest-wins sync of emulator saves through any shared folder
+  (Syncthing, cloud drive) so a phone and a handheld share progress.
+- **RetroAchievements.** Progress per game, matched by file hash.
+- **Second screen.** Dual-screen handhelds show the selected game's art and stats below.
 - **Make it yours.** Custom covers, wallpaper, local video themes, and adaptive colors.
 - **Playtime.** Per-game totals and last-session time for games launched through Nomad, with optional Android usage access.
 - **Battery insights.** Observed charge loss, average drain, and estimated remaining time; tap the battery indicator.
@@ -53,6 +65,9 @@ binaries, commercial cover art, BIOS files, and video themes are not bundled.
   `iShowStatusFlags = 1`). Patches ship for Crisis Core, GTA: Vice City Stories, God of War: Chains
   of Olympus, Assassin's Creed: Bloodlines, Gran Turismo and Project DIVA (US/JP discs); add a block
   to the table for others.
+- **PS2 widescreen patches (root).** Nomad identifies each PS2 ISO (PCSX2 CRC of its boot file),
+  looks for a patch in the widescreen database NetherSX2 already ships, and switches NetherSX2's
+  widescreen setting per game at launch. The game's ⋯ menu turns it off.
 
 ## Install
 

@@ -6,16 +6,17 @@ reports are welcome through GitHub issues.
 ## Next priorities
 
 - Broader physical-device testing, especially Android 8–12 and Android 14+.
-- More resilient emulator launching across package variants and storage providers.
-- Controller and D-pad navigation throughout the interface.
-- Large-library performance and multi-row Favorites behavior.
+- Physical confirmation of the Dolphin, Azahar, melonDS, Vita3K, Eden and Winlator intents.
+- Controller testing on dedicated handhelds (Retroid, AYN, Anbernic) and dual-screen devices.
+- Large-library performance (thousands of games) and multi-row Favorites behavior.
+- RetroAchievements hashing for disc systems (PS1, PS2, GameCube) and NDS.
 - Accessibility review: focus order, screen readers, text scaling, and contrast.
 - Better onboarding for game folders, platform detection, and emulator setup.
 
 ## Later exploration
 
-- User-configurable emulator choices per platform.
 - Portable library/settings export without copying game files.
+- Daijisho import (it keeps its library in a private database, unlike ES-DE).
 - Translation support.
 - Theme packaging with clear licensing and attribution.
 

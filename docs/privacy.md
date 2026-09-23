@@ -13,7 +13,8 @@ the selected game file. Uninstalling Nomad removes its private data and grants.
 ## Permissions
 
 - **Network state:** displays connectivity status.
-- **Internet:** may retrieve album artwork from a URL supplied by an active media app.
+- **Internet:** album artwork from a URL supplied by an active media app; optional
+  cover art, RetroAchievements and emulator download links described below.
 - **Set wallpaper:** supports the explicit black-wallpaper action.
 - **Wake lock / screen flag:** keeps the display awake while the launcher is visible.
 - **Folder access:** Android's system picker grants access to folders you select.
@@ -23,7 +24,32 @@ the selected game file. Uninstalling Nomad removes its private data and grants.
   apps, change PPSSPP configuration, and power off the device.
 
 Media artwork requests go to the host selected by the media app; that host may see
-your IP address. Nomad does not scrape game artwork or contact a game metadata API.
+your IP address.
+
+## Network features
+
+- **Cover art** (on by default, Settings → Artwork): for games without a cover, Nomad
+  downloads the per-system file list and matching box art from
+  `thumbnails.libretro.com`. The request reveals which systems you use and which box
+  art images are fetched (and therefore game titles), plus your IP address. Lists are
+  cached for a week; turn the setting off to stop all requests.
+- **RetroAchievements** (off until you connect): your username, Web API key and the
+  RetroAchievements ids of matched games are sent to `retroachievements.org`. Games are
+  matched by hashing files on the device; files and hashes are not uploaded. The key is
+  stored in Nomad's private preferences and removed on Disconnect. Keys are redacted
+  from logged URLs.
+- **Emulator links:** "Get …" entries open an emulator's official site in your browser.
+
+## Imports, saves and second screens
+
+- **ES-DE import** reads the folder you pick once and copies matching covers and
+  videos into Nomad's private storage; titles, favorites and hidden flags go into its
+  preferences.
+- **Save sync** copies save files between the save folders you add and the sync folder
+  you pick. Nomad does not upload anything itself; whatever syncs that folder (for
+  example Syncthing or a cloud-drive app) decides where the files go. A manifest in
+  each mirror records file hashes, times and the device model that wrote them.
+- **Second screen** shows the selected game on another connected display.
 Imported video themes are local files. Third-party emulators and media apps have
 separate privacy practices.
 
