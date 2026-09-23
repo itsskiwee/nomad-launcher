@@ -657,7 +657,7 @@ function openGameMenu(game, x, y) {
   $('menuTitle').textContent = game.title;
   $('menuPlaytime').textContent = `${formatDuration(game.playtimeMs)} played · Last session ${formatDuration(game.lastSessionMs)}`;
   $('menuFavorite').textContent = game.favorite ? 'Remove from favorites' : 'Add to favorites';
-  $('menuArtReset').hidden = !game.cover;
+  $('menuArtReset').hidden = !game.customCover;
   // Only discs with a known 60 FPS patch get the row; the launcher applies it through PPSSPP's cheat file.
   $('menuFps').hidden = !game.fpsPatch || game.fpsPatch === 'none';
   $('menuFps').textContent = game.fpsPatch === 'on' ? '60 FPS patch: on' : '60 FPS patch: off';
@@ -856,6 +856,7 @@ function renderSettings() {
     rows.append(p);
   }
   renderArtworkRows();
+  $('autoArtToggle').setAttribute('aria-checked', String(state.autoArt !== false));
   renderEmulatorRows();
   const hidden = state.games.filter(g => g.hidden);
   $('hiddenGames').hidden = !hidden.length;
@@ -890,10 +891,10 @@ function renderArtworkRows() {
     const actions = document.createElement('span');
     actions.className = 'art-actions';
     const change = document.createElement('button');
-    change.className = 'inline'; change.textContent = g.cover ? 'Change' : 'Choose';
+    change.className = 'inline'; change.textContent = g.customCover ? 'Change' : 'Choose';
     change.onclick = () => native('pickCover', g.id);
     actions.append(change);
-    if (g.cover) {
+    if (g.customCover) {
       const reset = document.createElement('button');
       reset.className = 'inline'; reset.textContent = 'Reset';
       reset.onclick = () => native('clearCover', g.id);
@@ -917,6 +918,8 @@ function appName(pkg) {
   return app ? app.title : pkg === 'com.spotify.music' ? 'Spotify' : 'music app';
 }
 $('addFolderSetting').onclick = () => native('chooseFolder');
+$('autoArtToggle').onclick = () => native('setAutoArt', state.autoArt === false);
+$('findCovers').onclick = () => { native('findCovers'); notify('Looking for covers…'); };
 $('rescanSetting').onclick = () => native('refresh');
 $('hiddenGames').onclick = e => {
   e.stopPropagation();

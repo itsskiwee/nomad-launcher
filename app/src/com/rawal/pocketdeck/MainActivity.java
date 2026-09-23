@@ -342,6 +342,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         unregisterReceiver(batteryReceiver);
         media.stop();
         worker.shutdownNow();
+        artWorker.shutdownNow();
         if (!webGone) {
             web.removeJavascriptInterface("Deck");
             web.destroy();
@@ -456,6 +457,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 state.put("mediaAccess", media.enabled());
                 state.put("version", getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
                 state.put("rootFeatures", Root.enabled(this));
+                state.put("autoArt", prefs.getBoolean("autoArt", true));
                 if (webGone) return;
                 pageAskedAt = System.currentTimeMillis();
                 web.evaluateJavascript("window.receiveState && window.receiveState(" + state + ")", value -> pageAnsweredAt = System.currentTimeMillis());
@@ -473,16 +475,19 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         item.put("lastSessionMs", playTracker.last(id));
         item.put("plays", prefs.getInt("plays." + id, 0));
         item.put("cover", coverFor(id));
+        item.put("customCover", item.optString("cover").contains("-cover.jpg"));
     }
 
+    /** The user's own cover, else downloaded box art. */
     private String coverFor(String id) {
         try {
-            String name = artKey(id) + "-cover.jpg";
-            File f = new File(artDir, name);
-            return f.exists() ? name + "?v=" + f.lastModified() : "";
-        } catch (Exception e) {
-            return "";
-        }
+            for (String suffix : new String[] { "-cover.jpg", "-box.jpg" }) {
+                String name = artKey(id) + suffix;
+                File f = new File(artDir, name);
+                if (f.exists()) return name + "?v=" + f.lastModified();
+            }
+        } catch (Exception ignored) { }
+        return "";
     }
 
     private String networkName() {
@@ -708,7 +713,53 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     }
 
     /** Work that follows every scan (artwork downloads). */
-    private void afterScan() { }
+    private void afterScan() { if (prefs.getBoolean("autoArt", true)) fetchCovers(false); }
+
+    private final ExecutorService artWorker = Executors.newSingleThreadExecutor();
+    private volatile boolean fetchingArt;
+
+    /**
+     * Downloads box art for games that have neither their own cover nor a downloaded one. Games
+     * with no match are not asked about again for a month unless `retry` (the Settings button).
+     */
+    private void fetchCovers(boolean retry) {
+        if (fetchingArt) return;
+        fetchingArt = true;
+        artWorker.execute(() -> {
+            int found = 0, missing = 0;
+            try {
+                CoverArt art = new CoverArt(new File(getCacheDir(), "thumbnail-index"));
+                JSONArray all = games();
+                long now = System.currentTimeMillis();
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject g = all.getJSONObject(i);
+                    String id = g.getString("id");
+                    if (new File(artDir, id + "-box.jpg").exists() || new File(artDir, id + "-cover.jpg").exists()) continue;
+                    String dir = CoverArt.dirFor(g.optString("system", "psp"), g.optString("filename"));
+                    if (dir == null) continue;
+                    if (!retry && now - prefs.getLong("boxart.miss." + id, 0) < 30L * 24 * 60 * 60 * 1000) continue;
+                    if (!"Offline".equals(networkName())) {
+                        String name = CoverArt.match(art.index(dir), g.optString("filename"), g.optString("title"));
+                        if (name != null && CoverArt.download(dir, name, new File(artDir, id + "-box.jpg"))) {
+                            found++;
+                            prefs.edit().remove("boxart.miss." + id).apply();
+                            if (found % 4 == 0) sendState();
+                            continue;
+                        }
+                    }
+                    missing++;
+                    prefs.edit().putLong("boxart.miss." + id, now).apply();
+                }
+            } catch (Exception e) {
+                Log.w("PocketDeck", "Cover art", e);
+            } finally {
+                fetchingArt = false;
+                if (found > 0) sendState();
+                if (retry) toast(found > 0 ? "Found " + found + (found == 1 ? " cover" : " covers") + (missing > 0 ? "; " + missing + " still missing." : ".")
+                    : missing > 0 ? "No covers found for " + missing + (missing == 1 ? " game." : " games.") : "Every game already has a cover.");
+            }
+        });
+    }
 
     /** Folders that hold emulator data or scraped media rather than games. */
     private static final HashSet<String> SKIP_DIRS = new HashSet<>(Arrays.asList(
@@ -940,7 +991,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
             prefs.edit().putString("games", kept.toString())
                 .remove("favorite." + id).remove("played." + id).remove("plays." + id).apply();
-            for (String suffix : new String[] { "-icon.jpg", "-bg.jpg", "-cover.jpg" }) new File(artDir, id + suffix).delete();
+            for (String suffix : new String[] { "-icon.jpg", "-bg.jpg", "-cover.jpg", "-box.jpg" }) new File(artDir, id + suffix).delete();
             toast("Deleted " + game.optString("title") + ".");
             sendState();
         });
@@ -1005,6 +1056,12 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             prefs.edit().putBoolean("favorite." + id, !prefs.getBoolean("favorite." + id, false)).apply();
             sendState();
         }
+        @JavascriptInterface public void setAutoArt(boolean on) {
+            prefs.edit().putBoolean("autoArt", on).apply();
+            sendState();
+            if (on) fetchCovers(false);
+        }
+        @JavascriptInterface public void findCovers() { fetchCovers(true); }
         @JavascriptInterface public void hide(String id, boolean hidden) {
             if (findGame(id) == null) return;
             if (hidden) prefs.edit().putBoolean("hidden." + id, true).apply(); else prefs.edit().remove("hidden." + id).apply();
