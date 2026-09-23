@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'none'">
+<title>Nomad</title>
+<style>
+ :root { color-scheme: dark; font-family: Roboto, "Google Sans", system-ui, sans-serif; --text: #f2f3f1; --text-2: rgba(255,255,255,.62); --text-3: rgba(255,255,255,.38); }
+ * { box-sizing: border-box; }
+ html, body { margin: 0; height: 100%; background: #0c0e0d; color: var(--text); overflow: hidden; user-select: none; }
+ /* The art, tiny and upscaled, is the whole background; the details sit on a dark fade. */
+ #ambient { position: fixed; inset: -6%; width: 112%; height: 112%; object-fit: cover; filter: blur(28px) saturate(1.2); opacity: 0; transition: opacity .5s ease; }
+ #ambient.show { opacity: .45; }
+ .fade { position: fixed; inset: 0; background: linear-gradient(90deg, rgba(12,14,13,.2), rgba(12,14,13,.85) 60%); }
+ main { position: relative; height: 100%; display: flex; align-items: center; gap: 6vw; padding: 6vh 7vw; }
+ #cover { height: 78vh; max-width: 42vw; aspect-ratio: 58 / 100; object-fit: cover; border-radius: 8px; box-shadow: 0 10px 40px rgba(0,0,0,.5); background: #1c1f1d; }
+ #cover[hidden] { display: none; }
+ .text { min-width: 0; display: flex; flex-direction: column; gap: 1.4vh; }
+ #system { font-size: 4.4vh; color: var(--text-3); font-weight: 500; }
+ #title { font-size: 8.5vh; font-weight: 600; line-height: 1.15; margin: 0; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+ #stats { font-size: 4.6vh; color: var(--text-2); line-height: 1.6; }
+ #idle { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 12vh; font-weight: 500; color: var(--text-2); font-variant-numeric: tabular-nums; }
+ [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<img id="ambient" alt="">
+<div class="fade"></div>
+<main id="game" hidden>
+ <img id="cover" alt="">
+ <div class="text"><span id="system"></span><h1 id="title"></h1><div id="stats"></div></div>
+</main>
+<div id="idle"></div>
+<script src="second.js"></script>
+</body>
+</html>

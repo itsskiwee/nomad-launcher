@@ -77,6 +77,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     private PlayTracker playTracker;
     private final BatteryTracker batteryTracker = new BatteryTracker();
     private MediaHub media;
+    private SecondScreen secondScreen;
     private final ExecutorService worker = Executors.newSingleThreadExecutor();
     private final Handler timer = new Handler(Looper.getMainLooper());
     private volatile boolean scanning = false;
@@ -171,7 +172,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         web.addJavascriptInterface(new Bridge(), "Deck");
         PerformanceBridge.attach(this, web);
         ThemeBridge.attach(this, web, artDir);
-        web.setWebViewClient(new WebViewClient() {
+        WebViewClient client = new WebViewClient() {
             @Override
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 return !request.getUrl().toString().startsWith(ORIGIN + "/");
@@ -191,7 +192,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                         return response(type, new FileInputStream(new File(artDir, name)));
                     }
                     if (path.equals("/")) path = "/index.html";
-                    if (!Arrays.asList("/index.html", "/app.css", "/app.js").contains(path)) throw new IOException();
+                    if (!Arrays.asList("/index.html", "/app.css", "/app.js", "/second.html", "/second.js").contains(path)) throw new IOException();
                     String type = path.endsWith("css") ? "text/css" : path.endsWith("js") ? "application/javascript" : "text/html";
                     return response(type, getAssets().open(path.substring(1)));
                 } catch (Exception e) {
@@ -200,7 +201,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
 
             @Override
-            public void onPageFinished(WebView view, String url) { pageAskedAt = pageAnsweredAt = 0; sendState(); sendMedia(); }
+            public void onPageFinished(WebView view, String url) { pageAskedAt = pageAnsweredAt = 0; view.requestFocus(); sendState(); sendMedia(); }
 
             /** The renderer was killed (memory pressure) or crashed; rebuild the page instead of letting the app die. */
             @Override
@@ -213,7 +214,9 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 recreate();
                 return true;
             }
-        });
+        };
+        web.setWebViewClient(client);
+        secondScreen = new SecondScreen(this, client);
         web.loadUrl(ORIGIN + "/index.html");
         registerReceiver(batteryReceiver, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
 
@@ -304,6 +307,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         timer.postDelayed(idleCleanup, 30000L);
         web.onResume();
         web.resumeTimers();
+        // The WebView must hold focus so its pre-IME hook sees the first controller press after a launch.
+        web.requestFocus();
         immersive();
         timer.removeCallbacks(ticker);
         if (!worker.isShutdown()) worker.execute(() -> { playTracker.settle(); refreshDeviceFacts(); runOnUiThread(ticker); });
@@ -317,11 +322,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         else timer.post(ticker);
         media.start();
         sendMedia();
+        secondScreen.resume(prefs.getBoolean("secondScreen", true));
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        secondScreen.pause();
         cleanupVisible = false;
         timer.removeCallbacks(idleCleanup);
         timer.removeCallbacks(ticker);
@@ -332,7 +339,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
-        if (hasFocus) immersive();
+        if (hasFocus) { immersive(); web.requestFocus(); }
     }
 
     private void immersive() {
@@ -423,6 +430,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         super.onNewIntent(intent);
         setIntent(intent);
         web.evaluateJavascript("window.goHome && window.goHome()", null);
+        web.requestFocus();
         sendState();
     }
 
@@ -566,6 +574,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 state.put("rootFeatures", Root.enabled(this));
                 state.put("autoArt", prefs.getBoolean("autoArt", true));
                 state.put("saves", savesState());
+                state.put("secondScreen", new JSONObject().put("enabled", prefs.getBoolean("secondScreen", true)).put("present", secondScreen.present()));
                 state.put("retroAchievements", new JSONObject().put("user", prefs.getString("ra.user", ""))
                     .put("connected", !prefs.getString("ra.key", "").isEmpty()).put("status", raStatus));
                 if (webGone) return;
@@ -1463,6 +1472,14 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (on) fetchCovers(false);
         }
         @JavascriptInterface public void findCovers() { fetchCovers(true); }
+        /** The selected game for the second screen; re-serialised so only plain JSON reaches that page. */
+        @JavascriptInterface public void secondScreen(String json) {
+            try { secondScreen.show(new JSONObject(json).toString()); } catch (Exception ignored) { }
+        }
+        @JavascriptInterface public void setSecondScreen(boolean on) {
+            prefs.edit().putBoolean("secondScreen", on).apply();
+            runOnUiThread(() -> { secondScreen.pause(); if (on) secondScreen.resume(true); sendState(); });
+        }
         @JavascriptInterface public void setRetroAchievements(String user, String key) {
             if (user == null || user.trim().isEmpty() || key == null || key.trim().isEmpty()) {
                 prefs.edit().remove("ra.user").remove("ra.key").remove("ra.checked").apply();

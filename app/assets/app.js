@@ -500,6 +500,22 @@ function renderHome() {
   $('heroTitle').textContent = game.title;
   updateBackdrop();
   updatePreview();
+  sendSecondScreen(game);
+}
+// A second display (dual-screen handhelds) mirrors the selected game's art and stats.
+let secondSignature = '';
+function sendSecondScreen(game) {
+  if (!window.Deck || typeof Deck.secondScreen !== 'function') return;
+  const sys = game && !game.android ? systemOf(game) : null, a = game && game.achievements;
+  const stats = !game ? [] : [
+    game.playtimeMs ? `${formatDuration(game.playtimeMs)} played` : 'Not played yet',
+    game.lastPlayed ? `Last played ${new Date(game.lastPlayed).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : '',
+    a && a.total ? `${a.got} of ${a.total} achievements` : ''
+  ].filter(Boolean);
+  const payload = JSON.stringify(game ? { title: game.title, cover: game.cover, icon: game.icon, system: game.android ? 'Android' : sys ? sys.name : '', stats } : {});
+  if (payload === secondSignature) return;
+  secondSignature = payload;
+  Deck.secondScreen(payload);
 }
 
 function empty(title, description, action = false) {
@@ -898,6 +914,9 @@ function renderSettings() {
   $('hiddenGames').hidden = !hidden.length;
   $('hiddenCount').textContent = `${hidden.length} ${hidden.length === 1 ? 'game' : 'games'}`;
   $('androidGamesToggle').setAttribute('aria-checked', String(androidGames));
+  const second = state.secondScreen || {};
+  $('secondScreenToggle').setAttribute('aria-checked', String(second.enabled !== false));
+  $('secondScreenState').textContent = second.present ? 'Showing on the second screen' : 'Shows on a second display when one is connected';
   document.querySelectorAll('#backgroundMode button').forEach(b => b.classList.toggle('active', b.dataset.value === backgroundMode));
   $('wallpaperState').textContent = state.wallpaper ? 'Custom image set' : 'No image chosen';
   renderThemeRows();
@@ -1085,6 +1104,7 @@ $('powerButton').onclick = () => {
   if (window.Performance && typeof window.Performance.shutdown === 'function') window.Performance.shutdown();
   else notify('Power control is unavailable in this build.');
 };
+$('secondScreenToggle').onclick = () => native('setSecondScreen', !(state.secondScreen && state.secondScreen.enabled !== false));
 $('rootFeaturesToggle').onclick = () => native('setRootFeatures', !state.rootFeatures);
 $('network').onclick = () => native('settings', 'wifi');
 $('search').oninput = renderLibrary;
