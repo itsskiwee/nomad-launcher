@@ -674,7 +674,9 @@ function openGameMenu(game, x, y) {
   menuGame = game; deleteArmed = false;
   const menu = $('gameMenu');
   $('menuTitle').textContent = game.title;
-  $('menuPlaytime').textContent = `${formatDuration(game.playtimeMs)} played · Last session ${formatDuration(game.lastSessionMs)}`;
+  const a = game.achievements;
+  $('menuPlaytime').textContent = `${formatDuration(game.playtimeMs)} played · Last session ${formatDuration(game.lastSessionMs)}`
+    + (a && a.total ? ` · ${a.got}/${a.total} achievements${a.hardcore === a.got && a.got ? ' (hardcore)' : ''}` : '');
   $('menuFavorite').textContent = game.favorite ? 'Remove from favorites' : 'Add to favorites';
   $('menuArtReset').hidden = !game.customCover;
   $('menuPreview').hidden = !!game.android;
@@ -904,6 +906,11 @@ function renderSettings() {
   $('versionText').textContent = state.version || '';
   renderMusicSettings();
   renderSaves();
+  const ra = state.retroAchievements || {};
+  $('raSignedOut').hidden = !!ra.connected;
+  $('raSignedIn').hidden = !ra.connected;
+  $('raAccount').textContent = ra.user || '';
+  $('raStatus').textContent = ra.status || 'Tap to refresh';
 }
 function timeAgo(ms) {
   const m = Math.round((Date.now() - ms) / 60000);
@@ -994,6 +1001,13 @@ $('addSaveFolder').onclick = () => native('addSaveFolder');
 $('findSaves').onclick = () => native('findSaveFolders');
 $('saveAutoToggle').onclick = () => native('setSaveAuto', !(state.saves && state.saves.auto !== false));
 $('syncNow').onclick = () => native('syncSaves');
+$('raConnect').onclick = () => {
+  if (!$('raUser').value.trim() || !$('raKey').value.trim()) return notify('Enter your username and Web API key.');
+  native('setRetroAchievements', $('raUser').value, $('raKey').value);
+  $('raKey').value = '';
+};
+$('raRefresh').onclick = () => native('refreshAchievements');
+$('raDisconnect').onclick = () => native('setRetroAchievements', '', '');
 $('previewsToggle').onclick = () => { previewsOn = !previewsOn; prefs.set('previews', previewsOn); renderSettings(); updatePreview(); };
 $('rescanSetting').onclick = () => native('refresh');
 $('hiddenGames').onclick = e => {

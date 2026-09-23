@@ -166,6 +166,17 @@
     <div class="rows"><button class="row" data-setting="usage"><span>Playtime tracking<small id="trackingState"></small></span><i class="chev"></i></button></div>
     <p class="hint">Tracks games launched through Nomad after usage access is enabled. Updates when you return. Emulator menus count as playtime; switching games inside an emulator stays attributed to the game launched here.</p>
     <div class="rows" id="playtimeRows"></div>
+    <h2>RetroAchievements</h2>
+    <div class="rows" id="raSignedOut">
+     <div class="row"><span>Username</span><input class="field" id="raUser" autocomplete="off" autocapitalize="off" spellcheck="false" aria-label="RetroAchievements username"></div>
+     <div class="row"><span>Web API key<small>retroachievements.org › Settings › Keys</small></span><input class="field" id="raKey" type="password" autocomplete="off" aria-label="RetroAchievements Web API key"></div>
+     <button class="row" id="raConnect"><span>Connect</span><i class="chev"></i></button>
+    </div>
+    <div class="rows" id="raSignedIn" hidden>
+     <button class="row" id="raRefresh"><span id="raAccount"></span><small id="raStatus"></small><i class="chev"></i></button>
+     <button class="row" id="raDisconnect"><span>Disconnect</span><i class="chev"></i></button>
+    </div>
+    <p class="hint">Progress shows in each game’s ⋯ menu. Games are matched by file hash, like RetroArch does, for cartridge systems, arcade and PSP ISOs. Your username, key and the matched game ids go to retroachievements.org; game files never leave the device.</p>
    </section>
 
    <section data-section="battery">

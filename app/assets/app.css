@@ -276,6 +276,9 @@ nav button.active { color: var(--text); font-weight: 600; }
   color: var(--text);
   user-select: text;
 }
+.field { width: 220px; height: 38px; padding: 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); color: var(--text); user-select: text; flex: none; }
+#raRefresh { flex-wrap: wrap; row-gap: 0; }
+#raRefresh small { flex-basis: 100%; order: 3; }
 .toolbar input::placeholder { color: var(--text-3); }
 .toggle {
   height: 40px; padding: 0 14px 0 10px;

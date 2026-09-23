@@ -307,6 +307,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         immersive();
         timer.removeCallbacks(ticker);
         if (!worker.isShutdown()) worker.execute(() -> { playTracker.settle(); refreshDeviceFacts(); runOnUiThread(ticker); });
+        // Achievements earned in the game just played; otherwise at most every six hours.
+        if (prefs.getLong("sync.launched", 0) > prefs.getLong("ra.checked", 0) || System.currentTimeMillis() - prefs.getLong("ra.checked", 0) > 6 * 3600000L) fetchAchievements(false);
         // Back from a game (or just started): send new saves and pick up another device's.
         if (prefs.getBoolean("sync.auto", true) && (prefs.getLong("sync.launched", 0) > prefs.getLong("sync.last", 0) || !syncedThisRun)) {
             syncedThisRun = true;
@@ -513,6 +515,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     if (title != null) g.put("title", title);
                     File clip = new File(artDir, g.getString("id") + "-video.mp4");
                     if (clip.exists()) g.put("video", clip.getName() + "?v=" + clip.lastModified());
+                    String[] ra = prefs.getString("ra.p." + g.getString("id"), "").split("/");
+                    if (ra.length == 3 && prefs.contains("ra.game." + g.getString("id"))) {
+                        g.put("achievements", new JSONObject().put("got", Integer.parseInt(ra[0])).put("total", Integer.parseInt(ra[1])).put("hardcore", Integer.parseInt(ra[2])));
+                    }
                 }
                 foldVersions(games);
                 JSONArray appList = new JSONArray();
@@ -552,6 +558,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 state.put("rootFeatures", Root.enabled(this));
                 state.put("autoArt", prefs.getBoolean("autoArt", true));
                 state.put("saves", savesState());
+                state.put("retroAchievements", new JSONObject().put("user", prefs.getString("ra.user", ""))
+                    .put("connected", !prefs.getString("ra.key", "").isEmpty()).put("status", raStatus));
                 if (webGone) return;
                 pageAskedAt = System.currentTimeMillis();
                 web.evaluateJavascript("window.receiveState && window.receiveState(" + state + ")", value -> pageAnsweredAt = System.currentTimeMillis());
@@ -1006,8 +1014,88 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         });
     }
 
-    /** Work that follows every scan (artwork downloads). */
-    private void afterScan() { if (prefs.getBoolean("autoArt", true)) fetchCovers(false); }
+    /** Work that follows every scan (artwork downloads, achievement matching). */
+    private void afterScan() {
+        if (prefs.getBoolean("autoArt", true)) fetchCovers(false);
+        fetchAchievements(false);
+    }
+
+    // ---- RetroAchievements ----
+
+    private volatile String raStatus = "";
+
+    /**
+     * Matches library games to RetroAchievements (hashing each once) and refreshes this account's
+     * progress. `manual` also reports the outcome; quiet runs happen after scans and games.
+     */
+    private void fetchAchievements(boolean manual) {
+        String user = prefs.getString("ra.user", ""), key = prefs.getString("ra.key", "");
+        if (user.isEmpty() || key.isEmpty()) return;
+        artWorker.execute(() -> {
+            try {
+                RetroAchievements ra = new RetroAchievements(new File(getCacheDir(), "retroachievements"), user, key);
+                JSONArray all = games();
+                Map<Integer, List<String>> byGame = new HashMap<>();
+                SharedPreferences.Editor edit = prefs.edit();
+                int supported = 0;
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject g = all.getJSONObject(i);
+                    String id = g.getString("id"), filename = g.optString("filename");
+                    int console = RetroAchievements.console(g.optString("system", "psp"), filename);
+                    if (console == 0) continue;
+                    supported++;
+                    String stamp = g.optLong("size") + ":", hash = prefs.getString("ra.hash." + id, "");
+                    if (!hash.startsWith(stamp)) {
+                        hash = stamp + hashGame(console, Uri.parse(g.optString("uri")), filename, g.optLong("size"));
+                        edit.putString("ra.hash." + id, hash).apply();
+                    }
+                    String md5 = hash.substring(stamp.length());
+                    Integer raId = md5.isEmpty() ? null : ra.games(console).get(md5);
+                    if (raId == null) { edit.remove("ra.game." + id); continue; }
+                    edit.putInt("ra.game." + id, raId);
+                    if (!byGame.containsKey(raId)) byGame.put(raId, new ArrayList<>());
+                    byGame.get(raId).add(id);
+                }
+                Map<Integer, int[]> progress = ra.progress(new ArrayList<>(byGame.keySet()));
+                int started = 0;
+                for (Map.Entry<Integer, List<String>> e : byGame.entrySet()) {
+                    int[] p = progress.get(e.getKey());
+                    if (p == null) continue;
+                    if (p[0] > 0) started++;
+                    for (String id : e.getValue()) edit.putString("ra.p." + id, p[0] + "/" + p[1] + "/" + p[2]);
+                }
+                edit.putLong("ra.checked", System.currentTimeMillis()).apply();
+                raStatus = byGame.size() + (byGame.size() == 1 ? " game has" : " games have") + " achievements · " + started + " started";
+                if (supported == 0) raStatus = "No games from systems Nomad can match yet (cartridge systems, arcade, PSP ISOs)";
+            } catch (Exception e) {
+                Log.w("PocketDeck", "RetroAchievements", e);
+                String m = String.valueOf(e.getMessage());
+                raStatus = m.contains("HTTP 401") || m.contains("HTTP 403") ? "The username or Web API key was not accepted" : "Could not reach RetroAchievements";
+            }
+            if (manual) toast("RetroAchievements: " + raStatus + ".");
+            sendState();
+        });
+    }
+
+    /** The RetroAchievements hash of one game ("" when it cannot be read or is too large). */
+    private String hashGame(int console, Uri doc, String filename, long size) {
+        try {
+            if (console == 27) return RetroAchievements.hashName(filename);
+            if (console == 41) {
+                try (ParcelFileDescriptor fd = getContentResolver().openFileDescriptor(doc, "r");
+                     FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
+                    return RetroAchievements.hashPspIso(in.getChannel());
+                }
+            }
+            if (size > RetroAchievements.MAX_ROM) return "";
+            try (InputStream in = getContentResolver().openInputStream(doc)) {
+                return RetroAchievements.hashRom(console, RetroAchievements.readRom(in, filename));
+            }
+        } catch (Exception e) {
+            Log.w("PocketDeck", "Hash " + filename, e);
+            return "";
+        }
+    }
 
     private final ExecutorService artWorker = Executors.newSingleThreadExecutor();
     private volatile boolean fetchingArt;
@@ -1356,6 +1444,19 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (on) fetchCovers(false);
         }
         @JavascriptInterface public void findCovers() { fetchCovers(true); }
+        @JavascriptInterface public void setRetroAchievements(String user, String key) {
+            if (user == null || user.trim().isEmpty() || key == null || key.trim().isEmpty()) {
+                prefs.edit().remove("ra.user").remove("ra.key").remove("ra.checked").apply();
+                raStatus = "";
+                sendState();
+                return;
+            }
+            prefs.edit().putString("ra.user", user.trim()).putString("ra.key", key.trim()).apply();
+            raStatus = "Checking…";
+            sendState();
+            fetchAchievements(true);
+        }
+        @JavascriptInterface public void refreshAchievements() { fetchAchievements(true); }
         @JavascriptInterface public void chooseSyncFolder() { pickTree(PICK_SYNC, "primary%3ASync"); }
         @JavascriptInterface public void addSaveFolder() { pickTree(PICK_SAVES, "primary%3APPSSPP%2FPSP%2FSAVEDATA"); }
         @JavascriptInterface public void findSaveFolders() {

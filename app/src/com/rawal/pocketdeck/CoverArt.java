@@ -161,13 +161,15 @@ final class CoverArt {
         c.setReadTimeout(20000);
         c.setRequestProperty("User-Agent", "Nomad-Launcher (+https://github.com/itsskiwee/nomad-launcher)");
         try {
-            if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode() + " for " + url);
+            // Error messages end up in logs; keep API keys (RetroAchievements' y=) out of them.
+            String shown = url.replaceAll("([?&]y=)[^&]*", "$1(key)");
+            if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode() + " for " + shown);
             try (InputStream in = c.getInputStream()) {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 byte[] buf = new byte[1 << 16];
                 for (int n; (n = in.read(buf)) > 0; ) {
                     out.write(buf, 0, n);
-                    if (out.size() > limit) throw new IOException("Response too large: " + url);
+                    if (out.size() > limit) throw new IOException("Response too large: " + shown);
                 }
                 return out.toByteArray();
             }
