@@ -917,6 +917,7 @@ function appName(pkg) {
 $('addFolderSetting').onclick = () => native('chooseFolder');
 $('autoArtToggle').onclick = () => native('setAutoArt', state.autoArt === false);
 $('findCovers').onclick = () => { native('findCovers'); notify('Looking for covers…'); };
+$('importMedia').onclick = () => native('importMedia');
 $('rescanSetting').onclick = () => native('refresh');
 $('hiddenGames').onclick = e => {
   e.stopPropagation();

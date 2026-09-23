@@ -69,7 +69,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     };
     /** A page that has not answered a state update for this long while resumed is reloaded. */
     private static final long PAGE_STALL_MS = 45000L;
-    private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43;
+    private static final int PICK_FOLDER = 41, PICK_COVER = 42, PICK_WALLPAPER = 43, PICK_MEDIA = 44;
 
     private File artDir;
     private SharedPreferences prefs;
@@ -185,7 +185,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 try {
                     if (path.startsWith("/art/")) {
                         String name = path.substring(5);
-                        if (name.matches("themes/[a-z0-9-]+\\.mp4")) return ThemeBridge.video(new File(artDir, name), request);
+                        if (name.matches("themes/[a-z0-9-]+\\.mp4") || name.matches("[a-f0-9]{24}-video\\.mp4")) return ThemeBridge.video(new File(artDir, name), request);
                         if (!name.matches("[a-zA-Z0-9_-]+\\.(jpg|png)")) throw new IOException();
                         String type = name.endsWith("png") ? "image/png" : "image/jpeg";
                         return response(type, new FileInputStream(new File(artDir, name)));
@@ -503,6 +503,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     g.put("fpsPatch", fpsPatchState(g));
                     g.put("emuChoice", prefs.getString("emu.game." + g.getString("id"), ""));
                     if (prefs.getBoolean("hidden." + g.getString("id"), false)) g.put("hidden", true);
+                    String title = prefs.getString("title." + g.getString("id"), null);
+                    if (title != null) g.put("title", title);
+                    File clip = new File(artDir, g.getString("id") + "-video.mp4");
+                    if (clip.exists()) g.put("video", clip.getName() + "?v=" + clip.lastModified());
                 }
                 foldVersions(games);
                 JSONArray appList = new JSONArray();
@@ -718,6 +722,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             } catch (Exception e) {
                 toast("Folder access was not granted. Please choose the folder again.");
             }
+        } else if (request == PICK_MEDIA) {
+            importMedia(uri);
         } else if (request == PICK_COVER || request == PICK_WALLPAPER) {
             final String target;
             try {
@@ -728,6 +734,67 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 else toast("That image could not be used.");
             });
         }
+    }
+
+    /** Copies another frontend's covers, videos, titles, favorites and hidden flags for the games in the library. */
+    private void importMedia(Uri tree) {
+        toast("Reading media… this can take a minute for large collections.");
+        worker.execute(() -> {
+            try {
+                JSONArray all = games();
+                HashSet<String> stems = new HashSet<>(), keys = new HashSet<>();
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject g = all.getJSONObject(i);
+                    String stem = MediaImport.stem(g.optString("filename")).toLowerCase(Locale.ROOT);
+                    stems.add(stem);
+                    keys.add(MediaImport.key(g.optString("system", "psp"), stem));
+                }
+                MediaImport.Found found = MediaImport.scan(getContentResolver(), tree,
+                    (sys, stem) -> sys == null ? stems.contains(stem.toLowerCase(Locale.ROOT)) : keys.contains(MediaImport.key(sys, stem)));
+                int covers = 0, videos = 0, titles = 0;
+                SharedPreferences.Editor edit = prefs.edit();
+                for (int i = 0; i < all.length(); i++) {
+                    JSONObject g = all.getJSONObject(i);
+                    String id = g.getString("id"), sys = g.optString("system", "psp"), stem = MediaImport.stem(g.optString("filename"));
+                    Uri cover = MediaImport.lookup(found.covers, sys, stem);
+                    if (cover != null && saveImage(cover, new File(artDir, id + "-box.jpg"), 1200)) covers++;
+                    Uri clip = MediaImport.lookup(found.videos, sys, stem);
+                    if (clip != null && copyVideo(clip, new File(artDir, id + "-video.mp4"))) videos++;
+                    MediaImport.Meta meta = MediaImport.lookup(found.meta, sys, stem);
+                    if (meta != null) {
+                        if (meta.name != null && !meta.name.isEmpty()) { edit.putString("title." + id, meta.name); titles++; }
+                        if (meta.favorite) edit.putBoolean("favorite." + id, true);
+                        if (meta.hidden) edit.putBoolean("hidden." + id, true);
+                    }
+                }
+                edit.apply();
+                toast(covers + videos + titles == 0 ? "Nothing in that folder matched your games. Pick the ES-DE folder, or a media folder with covers named like your game files."
+                    : "Imported " + covers + " covers, " + videos + " videos and " + titles + " titles.");
+                sendState();
+            } catch (Exception e) {
+                Log.w("PocketDeck", "Media import", e);
+                toast("That folder could not be read.");
+            }
+        });
+    }
+
+    /** Game preview clips are copied as they are; anything over 80 MB is skipped. */
+    private boolean copyVideo(Uri from, File target) {
+        File temp = new File(target.getPath() + ".part");
+        try (InputStream in = getContentResolver().openInputStream(from); FileOutputStream out = new FileOutputStream(temp)) {
+            byte[] buf = new byte[1 << 16];
+            long total = 0;
+            for (int n; (n = in.read(buf)) > 0; ) {
+                total += n;
+                if (total > 80L << 20) throw new IOException("Video too large");
+                out.write(buf, 0, n);
+            }
+        } catch (Exception e) {
+            Log.w("PocketDeck", "Video copy", e);
+            temp.delete();
+            return false;
+        }
+        return temp.renameTo(target);
     }
 
     private boolean saveImage(Uri uri, File target, int maxSide) {
@@ -1074,7 +1141,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
             prefs.edit().putString("games", kept.toString())
                 .remove("favorite." + id).remove("played." + id).remove("plays." + id).apply();
-            for (String suffix : new String[] { "-icon.jpg", "-bg.jpg", "-cover.jpg", "-box.jpg" }) new File(artDir, id + suffix).delete();
+            for (String suffix : new String[] { "-icon.jpg", "-bg.jpg", "-cover.jpg", "-box.jpg", "-video.mp4" }) new File(artDir, id + suffix).delete();
             toast("Deleted " + game.optString("title") + ".");
             sendState();
         });
@@ -1145,6 +1212,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             if (on) fetchCovers(false);
         }
         @JavascriptInterface public void findCovers() { fetchCovers(true); }
+        @JavascriptInterface public void importMedia() {
+            runOnUiThread(() -> {
+                Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT_TREE).addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                intent.putExtra(DocumentsContract.EXTRA_INITIAL_URI, Uri.parse("content://com.android.externalstorage.documents/document/primary%3AES-DE"));
+                try { startActivityForResult(intent, PICK_MEDIA); } catch (Exception e) { toast("The Android folder picker is unavailable."); }
+            });
+        }
         @JavascriptInterface public void hide(String id, boolean hidden) {
             if (findGame(id) == null) return;
             if (hidden) prefs.edit().putBoolean("hidden." + id, true).apply(); else prefs.edit().remove("hidden." + id).apply();
