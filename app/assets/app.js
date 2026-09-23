@@ -683,6 +683,9 @@ function openGameMenu(game, x, y) {
   // Only discs with a known 60 FPS patch get the row; the launcher applies it through PPSSPP's cheat file.
   $('menuFps').hidden = !game.fpsPatch || game.fpsPatch === 'none';
   $('menuFps').textContent = game.fpsPatch === 'on' ? '60 FPS patch: on' : '60 FPS patch: off';
+  // PS2 discs with a widescreen patch in NetherSX2's community database; applied through root at launch.
+  $('menuWide').hidden = !game.wsPatch || game.wsPatch === 'none' || !state.rootFeatures;
+  $('menuWide').textContent = game.wsPatch === 'on' ? 'Widescreen patch: on' : 'Widescreen patch: off';
   const sys = game.android ? null : systemOf(game);
   $('menuEmulator').hidden = !sys || sys.options.filter(o => o.installed).length < 2 && !game.emuChoice;
   if (sys) $('menuEmulator').textContent = 'Play with: ' + (optionLabel(sys, game.emuChoice) || optionLabel(sys, sys.choice) || 'none installed');
@@ -746,6 +749,7 @@ $('menuVersion').onclick = e => {
   if (g) openChooser(`${g.title} · version`, g.versions.map(v => ({ label: v.label, checked: v.id === g.id, run: () => { selected = v.id; native('setVersion', v.id); } })), r.left, r.top);
 };
 $('menuHide').onclick = () => { const g = menuGame; closeGameMenu(); if (g) { if (selected === g.id) selected = ''; native('hide', g.id, true); notify(`${g.title} hidden. Settings › Library brings it back.`); } };
+$('menuWide').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('wsPatch', g.id, g.wsPatch !== 'on'); };
 $('menuFps').onclick = () => { const g = menuGame; closeGameMenu(); if (g) native('fpsPatch', g.id, g.fpsPatch !== 'on'); };
 // Deleting a file is irreversible, so the first tap only arms the button.
 $('menuDelete').onclick = e => {

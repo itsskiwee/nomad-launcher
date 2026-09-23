@@ -496,6 +496,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         return prefs.getBoolean("fps60." + game.optString("id"), true) ? "on" : "off";
     }
 
+    /** "none" without a NetherSX2 widescreen patch for this disc, otherwise the per-game choice (on by default). */
+    private String wsPatchState(JSONObject game) {
+        String crc = game.optString("crc");
+        if (crc.isEmpty() || !Ps2Patches.cached().contains(crc)) return "none";
+        return prefs.getBoolean("ws." + game.optString("id"), true) ? "on" : "off";
+    }
+
     /** Art file key for a library id: PSP games use their hash, Android games hash the package. */
     private String artKey(String id) throws Exception {
         return id.startsWith("app:") ? "app-" + hash(id.substring(4)) : id;
@@ -510,6 +517,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                     decorate(g, g.getString("id"));
                     g.put("fpsPatch", fpsPatchState(g));
                     g.put("emuChoice", prefs.getString("emu.game." + g.getString("id"), ""));
+                    g.put("wsPatch", wsPatchState(g));
                     if (prefs.getBoolean("hidden." + g.getString("id"), false)) g.put("hidden", true);
                     String title = prefs.getString("title." + g.getString("id"), null);
                     if (title != null) g.put("title", title);
@@ -664,6 +672,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
     /** Package-manager round trips are not free; they are answered from these caches on the UI thread. */
     private void refreshDeviceFacts() {
         Systems.refresh(this);
+        Ps2Patches.available(this);
         defaultHome = isHome();
     }
 
@@ -1246,12 +1255,20 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
             String title = cleanTitle(name);
             if (!art.title.isEmpty()) title = art.title;
+            // PS2 discs: serial and PCSX2 CRC, which select a widescreen patch.
+            String serial = previous == null ? "" : previous.optString("serial"), crc = previous == null ? "" : previous.optString("crc");
+            if ("ps2".equals(system.id) && lower.endsWith(".iso") && crc.isEmpty()) {
+                try (ParcelFileDescriptor fd = getContentResolver().openFileDescriptor(doc, "r"); FileInputStream in = new FileInputStream(fd.getFileDescriptor())) {
+                    String[] id = Ps2Patches.identify(in.getChannel());
+                    serial = id[0]; crc = id[1];
+                } catch (Exception e) { Log.w("PocketDeck", "PS2 id " + name, e); }
+            }
             String set = DISC.matcher(lower).replaceAll("");
             JSONObject entry = new JSONObject().put("id", key).put("uri", doc.toString()).put("title", title).put("filename", name)
                 .put("discId", art.discId).put("icon", art.icon).put("background", art.background).put("system", system.id)
                 .put("size", Long.parseLong(f[2])).put("format", lower.substring(lower.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT))
                 .put("group", system.id + "|" + title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", ""))
-                .put("version", versionLabel(name));
+                .put("version", versionLabel(name)).put("serial", serial).put("crc", crc);
             if (discCount.containsKey(set) && discCount.get(set) > 1) entry.put("discs", discCount.get(set));
             out.put(entry);
         }
@@ -1330,6 +1347,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 return;
             }
             if (choice.emulator == Systems.PPSSPP) patchEmulatorConfig(game);
+            String ws = wsPatchState(game);
+            if (choice.emulator == Systems.NETHERSX2 && Root.enabled(this) && !"none".equals(ws)) Root.runGlobal(Ps2Patches.applyScript("on".equals(ws)), 8);
             runOnUiThread(() -> {
                 try {
                     long started = System.currentTimeMillis();
@@ -1492,6 +1511,11 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             JSONObject g = findGame(id);
             if (g == null || g.optString("group").isEmpty()) return;
             prefs.edit().putString("version." + g.optString("group"), id).apply();
+            sendState();
+        }
+        @JavascriptInterface public void wsPatch(String id, boolean on) {
+            if (findGame(id) == null) return;
+            prefs.edit().putBoolean("ws." + id, on).apply();
             sendState();
         }
         @JavascriptInterface public void fpsPatch(String id, boolean on) {

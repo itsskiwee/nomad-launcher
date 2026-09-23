@@ -13,9 +13,21 @@ final class Root {
     }
 
     /** Runs a shell snippet as root; returns its stdout, or null if root was denied or it timed out. */
-    static String run(String script, int timeoutSeconds) {
+    static String run(String script, int timeoutSeconds) { return exec(timeoutSeconds, "su", "-c", script); }
+
+    /**
+     * Runs as root in the global mount namespace. Android isolates app data, so another app's
+     * /data/data folder is invisible from Nomad's own namespace; Magisk's "-t 1" borrows init's.
+     * Root solutions without that option run the script as usual.
+     */
+    static String runGlobal(String script, int timeoutSeconds) {
+        String out = exec(timeoutSeconds, "su", "-t", "1", "-c", script);
+        return out != null ? out : run(script, timeoutSeconds);
+    }
+
+    private static String exec(int timeoutSeconds, String... command) {
         try {
-            Process process = new ProcessBuilder("su", "-c", script).redirectErrorStream(true).start();
+            Process process = new ProcessBuilder(command).redirectErrorStream(true).start();
             StringBuilder out = new StringBuilder();
             Thread pump = new Thread(() -> {
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(process.getInputStream()))) {
