@@ -192,3 +192,21 @@ test('controller input moves focus, opens menus, favorites and goes back', async
   await expect(page.locator('#home')).toHaveClass(/active/);
   expect(errors).toEqual([]);
 });
+
+test('settings refreshes keep controller focus; the second screen follows library focus', async ({ page }) => {
+  await page.addInitScript(() => { window.secondScreen = []; });
+  const errors = await openApp(page);
+  await page.evaluate(() => { Deck.secondScreen = json => window.secondScreen.push(JSON.parse(json).title); });
+  // Focus the third game's button in Artwork, a list that is rebuilt on every refresh.
+  await page.evaluate(() => { deckInput('select'); showSection('artwork'); focusEl(document.querySelectorAll('#artworkRows button')[2]); });
+  const where = () => page.evaluate(() => { const b = document.activeElement; return [b.closest('#artworkRows') ? [...document.querySelectorAll('#artworkRows button')].indexOf(b) : -1, b.textContent]; });
+  const before = await where();
+  const node = await page.evaluateHandle(() => document.activeElement);
+  await page.evaluate(() => receiveState({ ...window.fixture, battery: 40 }));   // a refresh rebuilds the rows
+  expect(await node.evaluate(n => n.isConnected)).toBe(false);                    // the old button is gone...
+  expect(await where()).toEqual(before);                                         // ...and focus is on its replacement
+  await page.evaluate(() => { deckInput('select'); deckInput('r1'); deckInput('right'); });
+  const focusedTitle = await page.evaluate(() => allGames().find(g => g.id === document.activeElement.closest('[data-id]').dataset.id).title);
+  expect(await page.evaluate(() => window.secondScreen.at(-1))).toBe(focusedTitle);
+  expect(errors).toEqual([]);
+});

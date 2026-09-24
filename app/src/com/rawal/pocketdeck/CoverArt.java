@@ -55,6 +55,12 @@ final class CoverArt {
     private static final Pattern HREF = Pattern.compile("href=\"([^\"?/]+\\.png)\"");
     private static final Pattern TAG = Pattern.compile("\\([^)]*\\)|\\[[^\\]]*\\]");
 
+    /** The server answered with an error status (as opposed to not being reachable at all). */
+    static final class HttpStatus extends IOException {
+        final int code;
+        HttpStatus(int code, String url) { super("HTTP " + code + " for " + url); this.code = code; }
+    }
+
     private final File cache;
     private final Map<String, List<String>> indexes = new HashMap<>();
 
@@ -163,7 +169,7 @@ final class CoverArt {
         try {
             // Error messages end up in logs; keep API keys (RetroAchievements' y=) out of them.
             String shown = url.replaceAll("([?&]y=)[^&]*", "$1(key)");
-            if (c.getResponseCode() != 200) throw new IOException("HTTP " + c.getResponseCode() + " for " + shown);
+            if (c.getResponseCode() != 200) throw new HttpStatus(c.getResponseCode(), shown);
             try (InputStream in = c.getInputStream()) {
                 ByteArrayOutputStream out = new ByteArrayOutputStream();
                 byte[] buf = new byte[1 << 16];

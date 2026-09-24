@@ -105,11 +105,18 @@ final class Ps2Patches {
     static synchronized Set<String> cached() { return available == null ? Collections.<String>emptySet() : available; }
 
     /**
-     * Root script: stop NetherSX2 so it re-reads its settings, then set the widescreen switch. The
-     * file is rewritten in place (not sed -i) so it keeps NetherSX2's owner and SELinux label.
+     * Root script: stop NetherSX2 so it re-reads its settings, then set the widescreen switch,
+     * adding it when NetherSX2 has not written it yet. The file is rewritten in place (not sed -i)
+     * so it keeps NetherSX2's owner and SELinux label. Exits non-zero when the preferences file is
+     * missing (NetherSX2 never opened) or the value did not stick.
      */
     static String applyScript(boolean on) {
+        String entry = "name=\\\"" + KEY + "\\\"";
         return "am force-stop xyz.aethersx2.android; f=" + PREFS + "; [ -f $f ] || exit 3; "
-            + "sed 's|name=\"" + KEY + "\" value=\"[a-z]*\"|name=\"" + KEY + "\" value=\"" + on + "\"|' $f > $f.nomad && cat $f.nomad > $f; rm -f $f.nomad";
+            + "awk -v v=" + on + " '"
+            + "index($0, \"" + entry + "\") { sub(/value=\"[a-z]*\"/, \"value=\\\"\" v \"\\\"\"); done = 1 } "
+            + "/<\\/map>/ && !done { print \"    <boolean " + entry + " value=\\\"\" v \"\\\" />\"; done = 1 } "
+            + "{ print }' $f > $f.nomad && cat $f.nomad > $f; rm -f $f.nomad; "
+            + "grep -q 'name=\"" + KEY + "\" value=\"" + on + "\"' $f";
     }
 }

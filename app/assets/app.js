@@ -518,7 +518,7 @@ function sendSecondScreen(game) {
   if (!window.Deck || typeof Deck.secondScreen !== 'function') return;
   const sys = game && !game.android ? systemOf(game) : null, a = game && game.achievements;
   const stats = !game ? [] : [
-    game.playtimeMs ? `${formatDuration(game.playtimeMs)} played` : 'Not played yet',
+    game.playtimeMs ? `${formatDuration(game.playtimeMs)} played` : game.lastPlayed ? '' : 'Not played yet',
     game.lastPlayed ? `Last played ${new Date(game.lastPlayed).toLocaleDateString([], { month: 'short', day: 'numeric' })}` : '',
     a && a.total ? `${a.got} of ${a.total} achievements` : ''
   ].filter(Boolean);
@@ -919,7 +919,22 @@ function renderStorage() {
   if (info.art) add('Artwork', info.art);
 }
 
+// Settings rows are rebuilt on every status tick; a controller's focus is put back on the same
+// control (by id, then by its own and its row's text, then by position) so it does not drop out.
 function renderSettings() {
+  const pane = document.querySelector('.settings-pane'), active = document.activeElement;
+  const rowText = el => (el.closest('.row') || el).textContent;
+  const held = padMode && pane.contains(active)
+    ? { id: active.id, text: active.textContent, row: rowText(active), index: padTargets(pane).indexOf(active) } : null;
+  drawSettings();
+  if (held && !pane.contains(document.activeElement)) {
+    const list = padTargets(pane);
+    const back = (held.id && $(held.id)) || list.find(el => el.textContent === held.text && rowText(el) === held.row)
+      || list[Math.min(held.index, list.length - 1)];
+    if (back) back.focus({ preventScroll: true });
+  }
+}
+function drawSettings() {
   renderTracking();
   const rows = $('folderRows');
   rows.replaceChildren();
@@ -1295,6 +1310,8 @@ function focusEl(el) {
   }
   const tile = el.closest('[data-id]');
   padFocusId = tile ? tile.dataset.id : '';
+  // The second screen follows the focused game in Library and Favorites, not only Home's selection.
+  if (tile) { const game = allGames().find(g => g.id === tile.dataset.id); if (game) sendSecondScreen(game); }
   if (el.closest('.settings-nav') && el.dataset.section !== section) showSection(el.dataset.section);
 }
 function focusFirst(scope) { if (padMode) focusEl(padTargets(scope)[0]); }

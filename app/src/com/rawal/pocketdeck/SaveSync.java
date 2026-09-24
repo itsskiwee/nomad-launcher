@@ -231,7 +231,13 @@ final class SaveSync {
         } catch (Exception e) { throw new IllegalStateException(e); }
     }
 
-    /** Syncs one save folder with its mirror; `cache` remembers local hashes by file time and size. */
+    /**
+     * Syncs one save folder with its mirror. `cache` keeps, per file, the local hash by file time
+     * and size (only when the folder reports times) and the "base": the hash both sides held after
+     * this device last synced the file. Comparing against the base says which side changed, so
+     * the direction does not depend on clocks; only when both changed does the newer time win,
+     * and when the local time is unknown the mirror's copy wins with the local one kept.
+     */
     static Result sync(Store local, Mirror mirror, String device, SharedPreferences cache, String cacheKey) {
         Result r = new Result();
         try {
@@ -240,35 +246,54 @@ final class SaveSync {
             SharedPreferences.Editor edit = cache.edit();
             boolean changed = false;
             for (Map.Entry<String, long[]> e : here.entrySet()) {
-                String rel = e.getKey();
+                String rel = e.getKey(), key = cacheKey + "|" + rel;
                 long modified = e.getValue()[0], size = e.getValue()[1];
-                String stamp = modified + ":" + size, key = cacheKey + "|" + rel;
-                String cached = cache.getString(key, "");
-                byte[] data = null;
-                String hash;
-                if (cached.startsWith(stamp + ":")) hash = cached.substring(stamp.length() + 1);
-                else {
-                    try (InputStream in = local.open(rel)) { data = readAll(in); }
-                    hash = sha1(data);
-                    edit.putString(key, stamp + ":" + hash);
-                }
-                Entry entry = files.get(rel);
-                boolean inMirror = there.containsKey(rel);
-                if (entry != null && inMirror && hash.equals(entry.hash)) { r.same++; continue; }
-                if (entry == null || !inMirror || modified > entry.modified) {
-                    if (data == null) try (InputStream in = local.open(rel)) { data = readAll(in); }
-                    mirror.write(rel, data);
-                    files.put(rel, new Entry(hash, modified, device));
-                    r.up++; changed = true;
-                } else {
-                    download(local, mirror, rel, edit, key, entry, r);
+                try {
+                    String stamp = modified + ":" + size, cached = cache.getString(key, "");
+                    byte[] data = null;
+                    String hash;
+                    if (modified > 0 && cached.startsWith(stamp + ":")) hash = cached.substring(stamp.length() + 1);
+                    else {
+                        try (InputStream in = local.open(rel)) { data = readAll(in); }
+                        hash = sha1(data);
+                        if (modified > 0) edit.putString(key, stamp + ":" + hash); else edit.remove(key);
+                    }
+                    Entry entry = files.get(rel);
+                    boolean inMirror = there.containsKey(rel);
+                    String base = cache.getString(key + "|base", null);
+                    if (entry != null && inMirror && hash.equals(entry.hash)) { r.same++; edit.putString(key + "|base", hash); continue; }
+                    boolean upload;
+                    if (entry == null || !inMirror) upload = true;
+                    else if (hash.equals(base)) upload = false;             // only the mirror moved on
+                    else if (entry.hash.equals(base)) upload = true;        // only this device changed
+                    else upload = modified > 0 && modified > entry.modified; // both changed, or first sync here
+                    if (upload) {
+                        if (data == null) try (InputStream in = local.open(rel)) { data = readAll(in); }
+                        mirror.write(rel, data);
+                        files.put(rel, new Entry(hash, modified, device));
+                        edit.putString(key + "|base", hash);
+                        r.up++; changed = true;
+                    } else if (download(local, mirror, rel, entry, true)) {
+                        edit.remove(key).putString(key + "|base", entry.hash);
+                        r.down++;
+                    }
+                } catch (Exception fileError) {
+                    // One unreadable or unwritable file is reported; the others still sync.
+                    r.error = rel + ": " + (fileError.getMessage() == null ? fileError.getClass().getSimpleName() : fileError.getMessage());
                 }
             }
             // Saves only the mirror has (another device's games, or a fresh install here).
             for (Map.Entry<String, Entry> e : files.entrySet()) {
-                String rel = e.getKey();
+                String rel = e.getKey(), key = cacheKey + "|" + rel;
                 if (here.containsKey(rel) || !there.containsKey(rel)) continue;
-                download(local, mirror, rel, edit, cacheKey + "|" + rel, e.getValue(), r);
+                try {
+                    if (download(local, mirror, rel, e.getValue(), false)) {
+                        edit.remove(key).putString(key + "|base", e.getValue().hash);
+                        r.down++;
+                    }
+                } catch (Exception fileError) {
+                    r.error = rel + ": " + (fileError.getMessage() == null ? fileError.getClass().getSimpleName() : fileError.getMessage());
+                }
             }
             edit.apply();
             if (changed) mirror.writeFile(MANIFEST, writeManifest(files));
@@ -279,18 +304,21 @@ final class SaveSync {
         return r;
     }
 
-    private static void download(Store local, Mirror mirror, String rel, SharedPreferences.Editor edit, String key, Entry entry, Result r) throws Exception {
+    /**
+     * Replaces the local copy with the mirror's. An existing local save is first copied to
+     * .previous; if that copy cannot be made, nothing is overwritten (the exception says why).
+     * Returns false while the mirror file is still arriving (its hash does not match yet).
+     */
+    private static boolean download(Store local, Mirror mirror, String rel, Entry entry, boolean existsLocally) throws Exception {
         byte[] data;
         try (InputStream in = mirror.open(rel)) { data = readAll(in); }
-        if (!sha1(data).equals(entry.hash)) return;   // the sync app is still copying it in
-        try {
+        if (!sha1(data).equals(entry.hash)) return false;
+        if (existsLocally) {
             byte[] old;
             try (InputStream in = local.open(rel)) { old = readAll(in); }
             mirror.write(PREVIOUS + "/" + rel, old);
-        } catch (IOException missing) { /* nothing here to keep */ }
+        }
         local.write(rel, data);
-        // The new local copy's time is unknown until the next listing; clear the cache so it is re-hashed then.
-        edit.remove(key);
-        r.down++;
+        return true;
     }
 }

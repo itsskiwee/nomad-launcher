@@ -350,6 +350,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         immersive();
         timer.removeCallbacks(ticker);
         if (!worker.isShutdown()) worker.execute(() -> { playTracker.settle(); refreshDeviceFacts(); runOnUiThread(ticker); });
+        if (coversPending && prefs.getBoolean("autoArt", true) && !"Offline".equals(networkName())) fetchCovers(false);
         // Achievements earned in the game just played; otherwise at most every six hours.
         if (prefs.getLong("sync.launched", 0) > prefs.getLong("ra.checked", 0) || System.currentTimeMillis() - prefs.getLong("ra.checked", 0) > 6 * 3600000L) fetchAchievements(false);
         // Back from a game (or just started): send new saves and pick up another device's.
@@ -1192,8 +1193,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 if (supported == 0) raStatus = "No games from systems Nomad can match yet (cartridge systems, arcade, PSP ISOs)";
             } catch (Exception e) {
                 Log.w("PocketDeck", "RetroAchievements", e);
-                String m = String.valueOf(e.getMessage());
-                raStatus = m.contains("HTTP 401") || m.contains("HTTP 403") ? "The username or Web API key was not accepted" : "Could not reach RetroAchievements";
+                int code = e instanceof CoverArt.HttpStatus ? ((CoverArt.HttpStatus) e).code : 0;
+                raStatus = code == 401 || code == 403 ? "The username or Web API key was not accepted" : "Could not reach RetroAchievements";
             }
             if (manual) toast("RetroAchievements: " + raStatus + ".");
             sendState();
@@ -1222,6 +1223,8 @@ public class MainActivity extends Activity implements MediaHub.Listener {
 
     private final ExecutorService artWorker = Executors.newSingleThreadExecutor();
     private volatile boolean fetchingArt;
+    /** The last cover run could not reach the server; it runs again when Nomad comes back online. */
+    private volatile boolean coversPending;
 
     /**
      * Downloads box art for games that have neither their own cover nor a downloaded one. Games
@@ -1232,18 +1235,22 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         fetchingArt = true;
         artWorker.execute(() -> {
             int found = 0, missing = 0;
+            boolean unreachable = "Offline".equals(networkName());
             try {
                 CoverArt art = new CoverArt(new File(getCacheDir(), "thumbnail-index"));
                 JSONArray all = games();
                 long now = System.currentTimeMillis();
-                for (int i = 0; i < all.length(); i++) {
+                for (int i = 0; i < all.length() && !unreachable; i++) {
                     JSONObject g = all.getJSONObject(i);
                     String id = g.getString("id");
                     if (new File(artDir, id + "-box.jpg").exists() || new File(artDir, id + "-cover.jpg").exists()) continue;
                     String dir = CoverArt.dirFor(g.optString("system", "psp"), g.optString("filename"));
                     if (dir == null) continue;
                     if (!retry && now - prefs.getLong("boxart.miss." + id, 0) < 30L * 24 * 60 * 60 * 1000) continue;
-                    if (!"Offline".equals(networkName())) {
+                    // A game is only set aside for a month when the list loaded and had no match (or
+                    // the image was missing or unusable); network or server trouble stops the run and
+                    // marks nothing, and the run repeats once Nomad is back online.
+                    try {
                         String name = CoverArt.match(art.index(dir), g.optString("filename"), g.optString("title"));
                         if (name != null && CoverArt.download(dir, name, new File(artDir, id + "-box.jpg"))) {
                             found++;
@@ -1251,6 +1258,12 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                             if (found % 4 == 0) sendState();
                             continue;
                         }
+                    } catch (CoverArt.HttpStatus status) {
+                        if (status.code >= 500 || status.code == 429) { unreachable = true; break; }
+                    } catch (IOException network) {
+                        Log.w("PocketDeck", "Cover art", network);
+                        unreachable = true;
+                        break;
                     }
                     missing++;
                     prefs.edit().putLong("boxart.miss." + id, now).apply();
@@ -1259,8 +1272,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 Log.w("PocketDeck", "Cover art", e);
             } finally {
                 fetchingArt = false;
+                coversPending = unreachable;
                 if (found > 0) sendState();
-                if (retry) toast(found > 0 ? "Found " + found + (found == 1 ? " cover" : " covers") + (missing > 0 ? "; " + missing + " still missing." : ".")
+                if (retry) toast(unreachable ? "Could not reach thumbnails.libretro.com. Covers will be fetched when you are online."
+                    : found > 0 ? "Found " + found + (found == 1 ? " cover" : " covers") + (missing > 0 ? "; " + missing + " still missing." : ".")
                     : missing > 0 ? "No covers found for " + missing + (missing == 1 ? " game." : " games.") : "Every game already has a cover.");
             }
         });
@@ -1462,7 +1477,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             }
             if (choice.emulator == Systems.PPSSPP) patchEmulatorConfig(game);
             String ws = wsPatchState(game);
-            if (choice.emulator == Systems.NETHERSX2 && Root.enabled(this) && !"none".equals(ws)) Root.runGlobal(Ps2Patches.applyScript("on".equals(ws)), 8);
+            if (choice.emulator == Systems.NETHERSX2 && Root.enabled(this) && !"none".equals(ws)
+                    && Root.runGlobal(Ps2Patches.applyScript("on".equals(ws)), 8) == null) {
+                toast("Widescreen patch not applied. Open NetherSX2 once so its settings exist, and check Nomad's root access.");
+            }
             runOnUiThread(() -> {
                 try {
                     long started = System.currentTimeMillis();
