@@ -1,9 +1,9 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-09-23
 
-- Controller navigation everywhere: D-pad, hat switches, left stick and face/shoulder
-  buttons; the first press after a touch or launch is never lost.
+- Controller navigation with D-pad, hat switches, left stick and face/shoulder
+  buttons, including focus preservation during Settings refreshes.
 - Emulator catalogue with automatic setup: 21 systems, per-system and per-game emulator
   choice, and new systems GameCube, Wii, 3DS, Vita, Switch, Saturn and Windows (Winlator).
   ES-DE folder names are recognised.
@@ -17,6 +17,22 @@
 - RetroAchievements progress in each game's menu.
 - PS2 widescreen patches through NetherSX2's own database (root).
 - Second-screen presentation for dual-screen handhelds.
+- Much faster with large libraries: the library is sent only when it changes and built off the
+  UI thread, the Library grid renders progressively with off-screen tiles skipped, and tiles use
+  400 px cover thumbnails (2,000-game test: Library opens in 13 ms instead of 558 ms, smooth scrolling).
+- Save sync keeps a local save whenever its backup cannot be made, and detects edits in folders
+  that report no file times.
+- Controller focus survives Settings refreshes; offline cover lookups retry when back online.
+
+- Faster large-library state updates and rendering.
+- Save-sync backup failures preserve the local save; timestamp-free folders use
+  content comparisons to detect changes.
+- Offline cover fetches remain eligible for retry; PS2 widescreen preferences are
+  inserted when absent; second-screen content follows Library/Favorites focus.
+
+Known issues: non-Latin titles may be grouped together, nested playlist references
+can leave duplicates, and gamelist image/video references are not resolved.
+See [release notes](docs/releases/v0.4.0.md) for scope and validation limits.
 
 ## 0.3.1.1 — 2026-09-22
 
