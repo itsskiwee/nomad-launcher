@@ -1,6 +1,7 @@
 package com.rawal.pocketdeck;
 
 import android.app.Activity;
+import android.os.Build;
 import android.widget.Toast;
 import android.view.View;
 import android.webkit.JavascriptInterface;
@@ -57,8 +58,17 @@ public final class PerformanceBridge {
             }
         }, "pocketdeck-power").start();
     }
+    /** Profiles are tuned to one SoC's tables; everywhere else only live readings are offered. */
+    @JavascriptInterface public boolean profilesSupported() { return "begonia".equals(Build.DEVICE); }
+    @JavascriptInterface public String deviceName() {
+        String model = Build.MODEL == null ? "" : Build.MODEL;
+        String maker = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER;
+        if (maker.isEmpty() || model.toLowerCase().startsWith(maker.toLowerCase())) return model;
+        return Character.toUpperCase(maker.charAt(0)) + maker.substring(1) + " " + model;
+    }
     @JavascriptInterface public void status() { run("status"); }
     @JavascriptInterface public void apply(String mode) {
+        if (!profilesSupported()) return;
         if ("saver".equals(mode) || "balanced".equals(mode) || "performance".equals(mode) || "turbo".equals(mode)) run(mode);
     }
     private void run(String mode) {

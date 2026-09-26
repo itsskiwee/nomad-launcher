@@ -21,6 +21,12 @@ All notable changes to Nomad Launcher. Each release has fuller notes in
 - The Performance tab shows the measured GPU clock (from the chip's clock meter, "Idle" between
   frames) instead of the requested one, and the running kernel's top GPU step in the mode details.
 
+### Fixed
+
+- On phones other than the Redmi Note 8 Pro, the Performance tab no longer shows that phone's
+  CPU and GPU clocks. The modes are hidden with a note naming the device, and the Live
+  readings (CPU clusters, GPU, battery temperature) come from the phone Nomad is running on.
+
 ## [0.4.1](https://github.com/itsskiwee/nomad-launcher/releases/tag/v0.4.1) — 2026-09-25
 
 ### Fixed

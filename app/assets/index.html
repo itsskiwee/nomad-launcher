@@ -193,18 +193,19 @@
    </section>
 
    <section data-section="performance">
-    <h2>Mode</h2>
-    <div class="rows" id="modeRows">
+    <p class="hint" id="performanceUnsupported" hidden></p>
+    <h2 class="perf-profile">Mode</h2>
+    <div class="rows perf-profile" id="modeRows">
      <button class="row" data-mode="saver" aria-pressed="false"><span>Power saver<small>Longer battery, lower clocks</small></span><i class="radio"></i></button>
      <button class="row" data-mode="balanced" aria-pressed="true"><span>Balanced<small>Phone defaults</small></span><i class="radio"></i></button>
      <button class="row" data-mode="performance" aria-pressed="false"><span>Performance<small>Higher minimum clocks</small></span><i class="radio"></i></button>
      <button class="row" data-mode="turbo" aria-pressed="false"><span>Turbo<small>Maximum clocks, more heat</small></span><i class="radio"></i></button>
     </div>
-    <div class="perf-detail">
+    <div class="perf-detail perf-profile">
      <div class="perf-specs"><span>CPU <b id="modeCpu"></b></span><span>GPU <b id="modeGpu"></b></span></div>
      <p class="hint" id="modeNote"></p>
     </div>
-    <div class="perf-actions">
+    <div class="perf-actions perf-profile">
      <button class="primary" id="applyPerformance" disabled>Apply</button>
      <button class="inline" id="resetPerformance">Restore balanced</button>
      <button class="inline" id="retryPerformance" hidden>Retry</button>

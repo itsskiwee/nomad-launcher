@@ -7,14 +7,14 @@ const snapshot = {
   apps: [], folders: [], appsLoaded: true, scanning: false, rootFeatures: false,
   battery: 85, network: 'Wi-Fi', version: '0.3.1.1',
 };
-async function openApp(page, state = snapshot) {
+async function openApp(page, state = snapshot, device = { supported: true, name: 'Redmi Note 8 Pro' }) {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.route('**/art/**', route => {
     const match = route.request().url().match(/demo-(\d+)/), i = match ? Number(match[1]) : 0;
     route.fulfill({ contentType: 'image/svg+xml', body: `<svg xmlns="http://www.w3.org/2000/svg" width="232" height="400"><rect width="232" height="400" fill="#1b2329"/><circle cx="170" cy="110" r="140" fill="${colors[i % colors.length]}"/><path d="M-40 340L250 60V160L-40 440Z" fill="#ffffff" opacity=".16"/><circle cx="155" cy="110" r="65" fill="#1b2329"/><text x="20" y="320" fill="#f0f0e8" font-family="sans-serif" font-size="21" font-weight="bold">${titles[i % titles.length].toUpperCase()}</text><text x="20" y="350" fill="#f0f0e8" opacity=".55" font-family="sans-serif" font-size="12">NOMAD · DEMO ART</text></svg>` });
   });
-  await page.addInitScript(state => {
+  await page.addInitScript(({ state, device }) => {
     window.calls = [];
     window.fixture = state;
     window.Deck = {
@@ -24,8 +24,11 @@ async function openApp(page, state = snapshot) {
       setRootFeatures: enabled => { state.rootFeatures = enabled; window.receiveState(state); },
       storage: () => '{}',
     };
-    window.Performance = { status: () => window.calls.push(['status']), apply: mode => window.calls.push(['apply', mode]) };
-  }, state);
+    window.Performance = {
+      status: () => window.calls.push(['status']), apply: mode => window.calls.push(['apply', mode]),
+      profilesSupported: () => device.supported, deviceName: () => device.name,
+    };
+  }, { state, device });
   await page.goto('/');
   await expect(page.locator('body')).not.toHaveClass(/booting/);
   await page.waitForTimeout(1250);
@@ -107,6 +110,23 @@ test('performance tab reflects an overclocked kernel and the measured GPU clock'
   await page.evaluate(s => receivePerformance(s), { ...stock, gpu: '806000' });
   await expect(page.locator('#liveGpu')).toHaveText('806 MHz');
   await expect(page.locator('#liveMemory')).toHaveText('—');
+  expect(errors).toEqual([]);
+});
+test('other devices get their own live readings and no Note 8 Pro modes', async ({ page }) => {
+  const errors = await openApp(page, snapshot, { supported: false, name: 'Samsung SM-S918B' });
+  await page.evaluate(() => { goPage('settings'); showSection('performance'); });
+  await expect(page.locator('#performanceUnsupported')).toContainText('not available on this Samsung SM-S918B');
+  await expect(page.locator('#modeRows')).toBeHidden();
+  await expect(page.locator('#modeCpu')).toBeHidden();
+  await expect(page.locator('#applyPerformance')).toBeHidden();
+  await page.evaluate(() => receivePerformance({ available: true, active: 'unsupported', request: 'status', cpus: '1785600 2419200 3187200', gpu: '680000', temperature: '312' }));
+  await expect(page.locator('#liveCpu')).toHaveText('1786 / 2419 / 3187 MHz');
+  await expect(page.locator('#liveGpu')).toHaveText('680 MHz');
+  await expect(page.locator('#liveTemperature')).toHaveText('31.2 °C');
+  await expect(page.locator('#performanceStatus')).not.toContainText('changed outside');
+  await page.evaluate(() => receivePerformance({ available: true, active: 'unsupported', request: 'status', cpus: '1785600', gpu: '', temperature: '312' }));
+  await expect(page.locator('#liveGpu')).toHaveText('—');
+  expect(await page.evaluate(() => window.calls.filter(c => c[0] === 'apply'))).toEqual([]);
   expect(errors).toEqual([]);
 });
 test('blocked video pixel access preserves the usable interface', async ({ page }) => {

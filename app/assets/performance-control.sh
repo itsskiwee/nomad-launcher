@@ -6,8 +6,29 @@ mode=${1:-status}
 case "$mode" in status|saver|balanced|performance|turbo) ;; *) echo 'error=Unknown mode'; exit 2;; esac
 fail() { echo "error=$*"; exit 1; }
 [ "$(id -u)" = 0 ] || fail 'Root access is required'
-[ "$(getprop ro.product.device)" = begonia ] || fail 'This controller supports begonia only'
 C=/sys/devices/system/cpu/cpufreq
+# Other devices: profiles are off, but live readings come from whatever this SoC exposes.
+if [ "$(getprop ro.product.device)" != begonia ]; then
+  [ "$mode" = status ] || fail 'Performance modes are not available on this device'
+  echo 'active=unsupported'
+  echo 'available=true'
+  echo "cpus=$(cat "$C"/policy*/scaling_cur_freq 2>/dev/null | xargs)"
+  gpu=''
+  # Adreno (kgsl) and devfreq report Hz; MediaTek GED reports kHz.
+  if [ -r /sys/class/kgsl/kgsl-3d0/gpuclk ]; then
+    gpu=$(awk '{print int($1 / 1000)}' /sys/class/kgsl/kgsl-3d0/gpuclk)
+  elif [ -r /sys/kernel/ged/hal/current_freqency ]; then
+    gpu=$(awk '{print $2}' /sys/kernel/ged/hal/current_freqency)
+  else
+    for d in /sys/class/devfreq/*; do
+      case "$d $(cat "$d/name" 2>/dev/null)" in *mali*|*gpu*|*kgsl*|*g3d*) ;; *) continue;; esac
+      [ -r "$d/cur_freq" ] && gpu=$(awk '{print int($1 / 1000)}' "$d/cur_freq") && break
+    done
+  fi
+  echo "gpu=$gpu"
+  echo "temperature=$(cat /sys/class/power_supply/battery/temp 2>/dev/null)"
+  exit 0
+fi
 G=/sys/kernel/ged/hal
 P=/proc/ppm/policy
 R=/sys/devices/platform/10012000.dvfsrc/helio-dvfsrc

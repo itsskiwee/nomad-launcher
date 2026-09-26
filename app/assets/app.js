@@ -1186,6 +1186,16 @@ const performanceModes = {
 // Highest GPU step in the running kernel's table: 806 on stock, higher on an overclocked kernel.
 let gpuTopMhz = 806;
 let selectedMode = 'balanced', activeMode = '', performanceBusy = false, performanceAvailable = false;
+// The modes above are tuned to the Redmi Note 8 Pro (begonia); other phones get live readings only.
+const profilesSupported = (() => { try { return window.Performance.profilesSupported() === true; } catch (error) { return false; } })();
+if (!profilesSupported) {
+  document.querySelectorAll('.perf-profile').forEach(node => { node.hidden = true; });
+  let device = '';
+  try { device = window.Performance.deviceName() || ''; } catch (error) { }
+  $('performanceUnsupported').textContent = 'Performance modes are built for the Redmi Note 8 Pro and are not available on '
+    + (device ? 'this ' + device : 'this device') + '. Live readings below come from this device.';
+  $('performanceUnsupported').hidden = false;
+}
 let performanceTimer, performanceTimeout, syncSelection = true, performanceRequest = 'status', queuedPerformance = '';
 
 function renderPerformanceControls() {
@@ -1246,7 +1256,7 @@ window.receivePerformance = result => {
     $('liveCpu').textContent = $('liveGpu').textContent = $('liveMemory').textContent = $('liveTemperature').textContent = '—';
     renderPerformanceControls(); return;
   }
-  activeMode = result.active;
+  activeMode = result.active === 'unsupported' ? '' : result.active;
   const top = Math.round(Number(result.gpuTop) / 1000);
   if (top > 0 && top !== gpuTopMhz) { gpuTopMhz = top; previewPerformance(selectedMode); }
   if (syncSelection || result.request !== 'status') {
@@ -1254,14 +1264,17 @@ window.receivePerformance = result => {
     syncSelection = false;
   }
   const mhz = value => Number.isFinite(Number(value)) && Number(value) > 0 ? Math.round(Number(value) / 1000) : '—';
-  $('liveCpu').textContent = mhz(result.cpu0) + ' / ' + mhz(result.cpu1) + ' MHz';
+  // Other devices report every CPU cluster in one field; begonia reports its two by name.
+  const clusters = result.cpus !== undefined ? String(result.cpus).split(' ').filter(Boolean) : [result.cpu0, result.cpu1];
+  $('liveCpu').textContent = clusters.length ? clusters.map(mhz).join(' / ') + ' MHz' : '—';
   // Prefer the SoC clock meter over the requested frequency; 0 means power-gated between frames.
-  if (result.gpuReal === undefined || result.gpuReal === '') $('liveGpu').textContent = mhz(result.gpu) + ' MHz';
+  if (result.gpuReal === undefined || result.gpuReal === '') $('liveGpu').textContent = Number(result.gpu) > 0 ? mhz(result.gpu) + ' MHz' : '—';
   else $('liveGpu').textContent = Number(result.gpuReal) > 0 ? mhz(result.gpuReal) + ' MHz' : 'Idle';
   $('liveMemory').textContent = Number(result.ddr) > 0 ? mhz(result.ddr) + ' MHz' : '—';
   $('liveTemperature').textContent = Number.isFinite(Number(result.temperature)) ? (Number(result.temperature) / 10).toFixed(1) + ' °C' : '—';
   const name = performanceModes[activeMode]?.title;
-  $('performanceStatus').textContent = name
+  $('performanceStatus').textContent = result.active === 'unsupported' ? 'Readings refresh every 5 seconds while this page is open.'
+    : name
     ? name + ' active · caps ' + mhz(result.cpu0max) + ' / ' + mhz(result.cpu1max) + ' MHz CPU, ' + mhz(result.gpuMax) + ' MHz GPU'
       + (Number(result.gpuLimit) > 0 ? ' · GPU held at ' + mhz(result.gpuLimit) + ' MHz by ' + (result.gpuLimitBy === 'thermal' ? 'thermal protection' : result.gpuLimitBy + ' protection') : '')
       + (Number(result.pllFailures) > 0 ? ' · GPU clock check reported ' + result.pllFailures + ' failures' : '')
