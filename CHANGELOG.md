@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.4.1 — 2026-09-25
+
+- Different games with non-Latin titles (Japanese, Chinese, Korean, Cyrillic and others) are no
+  longer grouped as versions of one game. Libraries from 0.4.0 are corrected without a rescan.
+  Accented and plain Latin spellings ("Pokémon", "Pokemon") now group together.
+- Playlists that list discs in a subfolder (`discs/`, `.hidden/`) hide those discs, so a
+  multi-disc game shows once. Byte-order marks and Windows line endings in `.m3u` files are handled.
+- Media import follows the `<thumbnail>`, `<image>` and `<video>` paths in `gamelist.xml`
+  (relative to the gamelist, or absolute paths inside the picked folder) for games the
+  folder layout found nothing for.
+
 ## 0.4.0 — 2026-09-23
 
 - Controller navigation with D-pad, hat switches, left stick and face/shoulder
