@@ -9,4 +9,5 @@ viewport/device size. Note anything that remains untested.
 
 - [ ] `npm test`
 - [ ] `./build.sh --debug`
+- [ ] User-visible changes have a line under `## Unreleased` in CHANGELOG.md
 - [ ] No signing credentials, private data, ROMs, or imported copyrighted assets added

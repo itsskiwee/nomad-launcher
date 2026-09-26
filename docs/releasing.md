@@ -1,5 +1,35 @@
 # Publishing a release
 
+## Release rhythm
+
+- **Unreleased first.** Every user-visible change adds a line under `## Unreleased`
+  in the changelog in the same pull request, so a release is mostly renaming that heading.
+- **Minor versions (0.5.0)** carry features. Each one goes out as at least one beta
+  (`0.5.0-beta.1`), gets tested on real devices, then ships as stable.
+- **Patch versions (0.5.1)** carry fixes only and can ship directly once tested.
+  Four-part hotfixes (`0.4.1.1`) are for an urgent fix to a patch that just shipped.
+- **Every release gets notes** in `docs/releases/vVERSION.md`, written from
+  [`TEMPLATE.md`](releases/TEMPLATE.md): what changed for players, known issues, and
+  what was and wasn't verified on hardware.
+- Each release needs a higher `android:versionCode`, including betas, or Android and
+  Obtainium will not offer it as an update.
+
+## Beta builds
+
+Beta and release-candidate versions (`X.Y.Z-beta.N`, `X.Y.Z-rc.N`) use the same steps
+below with that string as the manifest `versionName`. `release.sh` marks them as GitHub
+pre-releases. Publish a beta without `--latest`, so the README download link keeps
+pointing at the stable build:
+
+```sh
+gh release edit v0.5.0-beta.1 --draft=false
+```
+
+Obtainium users who turn on "Include prereleases" for Nomad receive betas; everyone
+else stays on stable. Ask testers to file a device report for each beta.
+
+## Steps
+
 Official releases are signed locally by the maintainer. Public CI builds and tests
 a development APK with a separate development certificate; CI never receives the
 release signing key. This keeps signing separate from code contributed by forks.
@@ -11,7 +41,7 @@ release signing key. This keeps signing separate from code contributed by forks.
 3. Install the signed APK on a test device and check startup, library, Favorites,
    settings, and permissions. Test a clean installation separately from upgrades.
 4. Commit and push the release source; wait for GitHub Actions to pass.
-5. Write release notes in `docs/releases/vVERSION.md`, commit them, and run:
+5. Write release notes in `docs/releases/vVERSION.md` from the template, commit them, and run:
 
    ```sh
    ./scripts/release.sh 0.3.0

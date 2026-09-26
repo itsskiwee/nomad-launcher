@@ -6,7 +6,7 @@ body:
     id: version
     attributes:
       label: Nomad version
-      placeholder: "0.3.1.1 (official APK or self-built)"
+      placeholder: "0.4.1 (official APK, Obtainium, or self-built)"
     validations:
       required: true
   - type: input

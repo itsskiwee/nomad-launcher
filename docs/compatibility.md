@@ -87,6 +87,14 @@ device installs retain their previous root behavior when upgrading.
   Active playback, visible windows, and missing diagnostic data skip cleanup.
 - PPSSPP integration may write `PauseMenuExitsEmulator = True` to supported config
   locations so exiting a game returns to the launcher.
+- PSP 60 FPS patches: Nomad reads each ISO's `DISC_ID`, writes `PSP/Cheats/<DISC_ID>.ini`
+  from `app/assets/fps-patches.txt`, sets `EnableCheats` (and `[CPU] CPUSpeed` for patches
+  that need it, e.g. Gran Turismo) in `ppsspp.ini`, and stops a lingering PPSSPP so it boots
+  fresh. On by default for supported discs; a game's ⋯ menu → "60 FPS patch" turns it off and
+  removes the cheat file. Verified on Crisis Core: 31 fps off, 61 fps on (PPSSPP's own
+  counter). Patches ship for Crisis Core, GTA: Vice City Stories, God of War: Chains of
+  Olympus, Assassin's Creed: Bloodlines, Gran Turismo and Project DIVA (US/JP discs); add
+  a block to the table for others.
 - PS2 widescreen patches: for discs with a patch in NetherSX2's own widescreen
   database, launching sets NetherSX2's `EmuCore/EnableWideScreenPatches` preference
   to the game's choice. The file is rewritten in place (owner and SELinux label kept),

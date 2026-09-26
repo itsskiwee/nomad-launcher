@@ -98,17 +98,24 @@ test('blocked video pixel access preserves the usable interface', async ({ page 
   await expect(page.locator('#home')).toBeVisible();
   expect(errors).toEqual([]);
 });
-test('documentation screenshots', async ({ page }) => {
-  test.skip(!process.env.NOMAD_SCREENSHOTS, 'Run npm run screenshots to refresh documentation images.');
-  await openApp(page);
-  fs.mkdirSync('docs/screenshots', { recursive: true });
-  await page.screenshot({ path: 'docs/screenshots/home.png' });
-  await page.evaluate(() => showHomePanel(1));
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: 'docs/screenshots/favorites.png' });
-  await page.evaluate(() => goPage('library'));
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: 'docs/screenshots/library.png' });
+test.describe('documentation', () => {
+  // Same layout as the device viewport, rendered at 2x so README images stay sharp.
+  test.use({ deviceScaleFactor: 2 });
+  test('documentation screenshots', async ({ page }) => {
+    test.skip(!process.env.NOMAD_SCREENSHOTS, 'Run npm run screenshots to refresh documentation images.');
+    await openApp(page);
+    fs.mkdirSync('docs/screenshots', { recursive: true });
+    await page.screenshot({ path: 'docs/screenshots/home.png' });
+    await page.evaluate(() => showHomePanel(1));
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: 'docs/screenshots/favorites.png' });
+    await page.evaluate(() => goPage('library'));
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'docs/screenshots/library.png' });
+    await page.evaluate(() => { goPage('settings'); showSection('theme'); });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: 'docs/screenshots/settings.png' });
+  });
 });
 
 test('playtime totals, ordering, last session and access guidance', async ({ page }) => {

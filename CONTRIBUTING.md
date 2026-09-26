@@ -4,18 +4,24 @@ Bug reports, device compatibility reports, documentation fixes, and focused pull
 requests are welcome. For a substantial feature, open an issue first so we can
 agree on the intended behavior and scope.
 
+You don't need to write code to help. A
+[device report](https://github.com/itsskiwee/nomad-launcher/issues/new?template=device.yml)
+from a handheld Nomad hasn't been tested on is one of the most useful contributions.
+
 ## Development
 
 1. Fork and clone the repository.
 2. Follow [the build guide](docs/building.md) to install the toolchain.
 3. Create a branch and make a focused change.
 4. Run the checks below and build a debug APK.
-5. Open a pull request explaining the user-visible change and how you tested it.
+5. Add a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) for anything a player would notice.
+6. Open a pull request explaining the user-visible change and how you tested it.
 
 ```sh
 npm ci
 npx playwright install chromium
 npm test
+bash tests/game-art.sh   # Java unit tests; needs the Android SDK
 ./build.sh --debug
 ```
 

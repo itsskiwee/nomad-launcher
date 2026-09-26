@@ -2,7 +2,10 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 version="${1:?Usage: ./scripts/release.sh VERSION}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || { echo 'Expected version X.Y.Z or X.Y.Z.N' >&2; exit 1; }
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(\.[0-9]+|-(beta|rc)\.[0-9]+)?$ ]] || { echo 'Expected version X.Y.Z, X.Y.Z.N, X.Y.Z-beta.N or X.Y.Z-rc.N' >&2; exit 1; }
+# Beta and release-candidate builds publish as GitHub pre-releases: Obtainium users
+# who enable "Include prereleases" get them, everyone else stays on the stable release.
+channel=(); [[ "$version" == *-* ]] && channel=(--prerelease)
 [[ -z "$(git status --porcelain)" ]] || { echo 'Commit or stash working changes first.' >&2; exit 1; }
 [[ "$(git branch --show-current)" == main ]] || { echo 'Release from main.' >&2; exit 1; }
 git fetch origin main
@@ -25,5 +28,5 @@ sdk="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Android/Sdk}}"
 git tag -a "v$version" -m "Nomad Launcher $version"
 git push origin "v$version"
 gh release create "v$version" "$folder/nomad-launcher.apk" "$folder/SHA256SUMS" \
-  "$folder/SIGNING-CERTIFICATE.txt" --verify-tag --draft \
+  "$folder/SIGNING-CERTIFICATE.txt" --verify-tag --draft "${channel[@]}" \
   --title "Nomad Launcher $version" --notes-file "$notes"

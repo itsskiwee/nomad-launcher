@@ -1,109 +1,116 @@
 <div align="center">
   <img src="art/brand/nomad-icon.png" width="96" alt="Nomad logo">
   <h1>Nomad Launcher</h1>
-  <p>A quiet home for your Android game library.</p>
+  <p><strong>A quiet home for your Android game library.</strong><br>
+  Free and open-source emulation frontend for Android handhelds and phones.</p>
 
 [![Build](https://github.com/itsskiwee/nomad-launcher/actions/workflows/ci.yml/badge.svg)](https://github.com/itsskiwee/nomad-launcher/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/itsskiwee/nomad-launcher)](https://github.com/itsskiwee/nomad-launcher/releases)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Android 8+](https://img.shields.io/badge/Android-8%2B-3DDC84.svg)](docs/compatibility.md)
 
-**[Download APK](https://github.com/itsskiwee/nomad-launcher/releases/latest/download/nomad-launcher.apk)** · **[Getting started](docs/getting-started.md)** · **[Report a bug](https://github.com/itsskiwee/nomad-launcher/issues/new/choose)**
+<a href="https://github.com/itsskiwee/nomad-launcher/releases/latest/download/nomad-launcher.apk"><img src="https://img.shields.io/badge/Download-APK-a5e75b?style=for-the-badge&logo=android&logoColor=white&labelColor=1b2329" height="40" alt="Download APK"></a>
+&nbsp;
+<a href="https://apps.obtainium.imranr.dev/redirect?r=obtainium://app/%7B%22id%22%3A%22com.rawal.pocketdeck%22%2C%22url%22%3A%22https%3A%2F%2Fgithub.com%2Fitsskiwee%2Fnomad-launcher%22%2C%22author%22%3A%22itsskiwee%22%2C%22name%22%3A%22Nomad%20Launcher%22%7D"><img src="docs/badges/obtainium.png" height="40" alt="Get it on Obtainium"></a>
+
+<img src="docs/screenshots/home.png" alt="Nomad Home: a row of game covers with the selected game's title below" width="860">
+
 </div>
 
----
+Nomad puts your games front and centre: covers first, your most-played up front, and
+one tap (or one button) to launch the right emulator. Your library works offline, with
+no account, no ads and no analytics. Root is optional and only unlocks extras.
 
-Nomad is a landscape launcher for Android gaming devices. Browse your games by
-cover, swipe into Favorites, and launch Android games or your preferred emulator.
-The interface stays focused on your library, with optional video backgrounds and
-music controls.
+## Highlights
 
-**Early release:** developed and tested on a Redmi Note 8 Pro running Android 13.
-The APK supports Android 8.0+, but other devices and emulator versions need more
-community testing. Root is optional for the library and launcher;
-[advanced controls](docs/compatibility.md#root-features) have a narrower hardware scope.
+**Your library, tidied**
+- 21 systems, from NES to Switch, alongside your installed Android games
+- Search, favorites, and hidden games for anything you don't want to see
+- Box art downloads automatically from libretro-thumbnails; your own art always wins
+- Multi-disc sets, cue sheets and regional versions show as a single game
+- Brings over covers, videos, titles and favorites from an ES-DE or Skraper library
 
-## A look inside
+**Made for playing**
+- Picks an installed emulator per system, or choose one per system or per game
+- Full controller navigation, with touch still working everywhere
+- Video previews behind the selected game on Home
+- Playtime per game, and battery drain and time remaining at a tap
 
-| Home | Favorites |
-| --- | --- |
-| ![Home with cover carousel](docs/screenshots/home.png) | ![Favorites page](docs/screenshots/favorites.png) |
+**Across your devices**
+- Save sync between a phone and a handheld through any shared folder (Syncthing, cloud drive)
+- RetroAchievements progress for each game, matched by file hash
+- Artwork and game info on the second screen of dual-screen handhelds
 
-Screenshots use original demo artwork and fictional game names. Games, emulator
-binaries, commercial cover art, BIOS files, and video themes are not bundled.
+**Optional root extras**
+- PSP 60 FPS patches applied at launch (Crisis Core, God of War, GTA and more)
+- PS2 widescreen patches through NetherSX2's own database
+- Performance profiles on validated hardware
 
-## Features
+<table>
+  <tr>
+    <td><img src="docs/screenshots/library.png" alt="Library grid with search and favorites filter"></td>
+    <td><img src="docs/screenshots/favorites.png" alt="Favorites page"></td>
+    <td><img src="docs/screenshots/settings.png" alt="Theme settings"></td>
+  </tr>
+  <tr>
+    <td align="center">Library</td>
+    <td align="center">Favorites</td>
+    <td align="center">Settings</td>
+  </tr>
+</table>
 
-- **Cover-first Home.** Most-played games up front; tap to select, tap again to launch.
-- **Swipeable Favorites.** Swipe up from Home for your favorites and down to return.
-- **Searchable library.** Android games and ROM folders together, with explicit game menus.
-- **Controller first.** D-pad, sticks and face buttons drive every screen; touch still works.
-- **Emulators set themselves up.** Nomad picks an installed emulator for each of 21 systems
-  (PSP, PS1, PS2, N64, GameCube, Wii, 3DS, DS, Switch, Vita, Windows via Winlator, and the
-  RetroArch classics); choose another per system or per game.
-- **Covers without effort.** Box art downloads from libretro-thumbnails; your own always wins.
-- **Tidy library.** Multi-disc sets, cue sheets and regional versions show as one game;
-  BIOS files and data folders stay out; hide anything else.
-- **Bring your ES-DE library.** Import covers, preview videos, titles and favorites.
-- **Video previews.** A game's clip plays behind Home while it is selected.
-- **Save sync.** Two-way, newest-wins sync of emulator saves through any shared folder
-  (Syncthing, cloud drive) so a phone and a handheld share progress.
-- **RetroAchievements.** Progress per game, matched by file hash.
-- **Second screen.** Dual-screen handhelds show the selected game's art and stats below.
-- **Make it yours.** Custom covers, wallpaper, local video themes, and adaptive colors.
-- **Playtime.** Per-game totals and last-session time for games launched through Nomad, with optional Android usage access.
-- **Battery insights.** Observed charge loss, average drain, and estimated remaining time; tap the battery indicator.
-- **Keep music close.** Playback controls after granting Android notification access.
-- **Optional root controls.** Supported-device performance profiles, shutdown, idle cleanup,
-  and PPSSPP exit integration. Disabled by default on new installations.
-- **60 FPS patches (root).** PSP games that run their logic at 30 fps get the community 60 FPS
-  patch applied on launch: Nomad reads each ISO's `DISC_ID`, writes `PSP/Cheats/<DISC_ID>.ini` from
-  `app/assets/fps-patches.txt`, sets `EnableCheats` (and `[CPU] CPUSpeed` for patches that need it,
-  e.g. Gran Turismo) in `ppsspp.ini`, and stops a lingering PPSSPP so it boots fresh. On by default
-  for supported discs; the game's ⋯ menu has a "60 FPS patch" row to turn it off per game, which
-  also removes the cheat file. Verified on Crisis Core: 31 fps off, 61 fps on (PPSSPP's own counter,
-  `iShowStatusFlags = 1`). Patches ship for Crisis Core, GTA: Vice City Stories, God of War: Chains
-  of Olympus, Assassin's Creed: Bloodlines, Gran Turismo and Project DIVA (US/JP discs); add a block
-  to the table for others.
-- **PS2 widescreen patches (root).** Nomad identifies each PS2 ISO (PCSX2 CRC of its boot file),
-  looks for a patch in the widescreen database NetherSX2 already ships, and switches NetherSX2's
-  widescreen setting per game at launch. The game's ⋯ menu turns it off.
+<sub>Screenshots use original demo artwork. Games, emulators, BIOS files and commercial
+cover art are never bundled.</sub>
 
 ## Install
 
-1. Download **[nomad-launcher.apk](https://github.com/itsskiwee/nomad-launcher/releases/latest/download/nomad-launcher.apk)** on your Android device.
-2. Open it and allow installation from your browser or file manager when Android asks.
-3. Open **Nomad**, add a game folder, and install/configure an emulator for each platform.
-4. Optionally choose Nomad as your default Home app in Android Settings.
+1. Download **[nomad-launcher.apk](https://github.com/itsskiwee/nomad-launcher/releases/latest/download/nomad-launcher.apk)**, or add Nomad to **[Obtainium](https://obtainium.imranr.dev/)** for automatic updates.
+2. Open the APK and allow installation from your browser or file manager when Android asks.
+3. Open **Nomad**, add your game folders, and install an emulator for each system.
+4. Optionally set Nomad as your Home app in Android Settings.
 
-No account or API key is required. Each release includes a SHA-256 checksum and
-signing certificate information. See [installation and updates](docs/getting-started.md)
-for permissions, troubleshooting, and upgrade details.
+Requires Android 8.0 or later. Each release includes a SHA-256 checksum and signing
+certificate details. See [getting started](docs/getting-started.md) for permissions,
+folder layout and updates, and [compatibility](docs/compatibility.md) for the full
+list of systems and emulators.
+
+## Tested devices
+
+Nomad is an early release. It is developed on the device below; every report from
+other hardware helps.
+
+| Device | Android | Status |
+| --- | --- | --- |
+| Redmi Note 8 Pro | 13 | Primary development device, all features |
+| Android simulated second display | 13 | Second-screen presentation |
+
+Running Nomad on a Retroid, AYN, Anbernic or another device?
+**[Send a device report](https://github.com/itsskiwee/nomad-launcher/issues/new?template=device.yml)**, even if everything works.
 
 ## Build and contribute
 
-The app uses Java and a local HTML/CSS/JavaScript WebView interface. There is no Gradle
-project or runtime JavaScript framework. The build uses standard Android SDK tools.
+Nomad is Java plus a local HTML/CSS/JavaScript WebView interface, built with the
+standard Android SDK tools. There is no Gradle project and no runtime framework.
 
 ```sh
 git clone https://github.com/itsskiwee/nomad-launcher.git
 cd nomad-launcher
 # Requires JDK 17 and Android SDK platform/build-tools 35.
 ./build.sh --debug
-# Output: build/nomad-launcher.apk
+# Output: build/nomad-launcher.apk (installs separately as Nomad Dev)
 ```
 
 See **[building](docs/building.md)** for prerequisites and signing, and
 **[contributing](CONTRIBUTING.md)** for tests and pull requests.
 
-| Project guide | Details |
+| Guide | Details |
 | --- | --- |
-| [Compatibility](docs/compatibility.md) | Android versions, emulators, root support, known limits |
+| [Compatibility](docs/compatibility.md) | Systems, emulators, controllers, root features, known limits |
 | [Architecture](docs/architecture.md) | Native shell, WebView, storage, and JavaScript bridges |
 | [Privacy](docs/privacy.md) | Local data, permissions, and network use |
-| [Release process](docs/releasing.md) | Maintainer signing, tagging, and APK publication |
 | [Changelog](CHANGELOG.md) | Changes by release |
 | [Roadmap](ROADMAP.md) | Current priorities and ways to help |
+| [Release process](docs/releasing.md) | Versioning, beta builds, signing and publication |
 | [Security](SECURITY.md) | Report vulnerabilities privately |
 
 ## License

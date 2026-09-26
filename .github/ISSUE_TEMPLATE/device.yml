@@ -1,0 +1,60 @@
+name: Device report
+description: Tell us how Nomad runs on your device, even if everything works.
+title: "[Device] "
+labels: [device-report]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Reports from real hardware decide what gets fixed next and fill the
+        "Tested devices" table in the README. Answer what you can; skip the rest.
+  - type: input
+    id: device
+    attributes:
+      label: Device and Android version
+      placeholder: "Retroid Pocket 5 / Android 13"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Nomad version
+      placeholder: "0.4.1"
+    validations:
+      required: true
+  - type: dropdown
+    id: overall
+    attributes:
+      label: Overall
+      options:
+        - Everything I tried works
+        - Works with small problems
+        - Major problems
+    validations:
+      required: true
+  - type: checkboxes
+    id: works
+    attributes:
+      label: What did you try that worked?
+      options:
+        - label: Library scan and covers
+        - label: Launching games (list emulators below)
+        - label: Controller navigation
+        - label: Video previews
+        - label: Save sync
+        - label: RetroAchievements
+        - label: Second screen (dual-screen devices)
+        - label: Set as Home app
+  - type: textarea
+    id: emulators
+    attributes:
+      label: Emulators you launched
+      description: Name, version, and whether the game started.
+      placeholder: |
+        Dolphin 2512 - GameCube - works
+        Azahar 2124 - 3DS - opens the emulator but not the game
+  - type: textarea
+    id: problems
+    attributes:
+      label: Problems or rough edges
+      description: What happened, and what you expected. Screenshots help. Do not upload ROMs or BIOS files.

@@ -2,8 +2,9 @@
 
 ## Install and update
 
-Download `nomad-launcher.apk` from the [latest GitHub release](https://github.com/itsskiwee/nomad-launcher/releases/latest).
-Open it on Android 8.0 or newer. Android may ask you to allow your browser or file
+Download `nomad-launcher.apk` from the [latest GitHub release](https://github.com/itsskiwee/nomad-launcher/releases/latest),
+or add the repository to [Obtainium](https://obtainium.imranr.dev/) to get updates
+automatically. Open the APK on Android 8.0 or newer. Android may ask you to allow your browser or file
 manager to install apps. Nomad does not require an account, API key, or root for its
 core launcher features.
 
@@ -43,7 +44,8 @@ after a second confirming tap. For Android games it opens the system uninstaller
 
 Settings → Theme lets you choose colors, wallpaper/background modes, and local MP4
 video backgrounds. Custom cover artwork is managed through game menus or Settings →
-Artwork. No online artwork service or video-theme catalog is bundled.
+Artwork. Missing covers download from libretro-thumbnails without an account; your
+own artwork always takes priority. No video-theme catalog is bundled.
 
 Music controls require notification access. Use Settings → Music to open Android's
 notification-access screen and enable Nomad. This enables access to active media
