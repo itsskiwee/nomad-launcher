@@ -26,7 +26,7 @@ reload an unresponsive page.
 `Systems.java` maps platform folder names to systems and each system to the emulators
 that can play it, with the launch intent each expects (after ES-DE's Android
 definitions). `CoverArt` matches and downloads libretro box art; `MediaImport` reads
-ES-DE/Skraper media and gamelists; `SaveSync` mirrors save folders (SAF or root) into a
+ES-DE/Skraper media and gamelists, including their `<image>`/`<thumbnail>`/`<video>` paths; `SaveSync` mirrors save folders (SAF or root) into a
 user-picked folder with a hash manifest; `RetroAchievements` hashes games like rcheevos
 and reads progress; `Ps2Patches` identifies PS2 discs for NetherSX2 widescreen patches;
 `SecondScreen` renders `second.html` on a presentation display. Controller input is

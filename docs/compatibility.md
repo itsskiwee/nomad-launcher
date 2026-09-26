@@ -56,10 +56,11 @@ Games, BIOS files and cores must be supplied and configured separately.
 
 ## Library tidying
 
-Discs listed in an `.m3u` and the tracks of a `.cue`/`.gdi` are hidden behind their
-playlist or cue sheet. A disc set without a playlist shows once and plays disc 1.
-Versions of the same game in one system fold into one entry (a chosen version, else
-USA, World, Europe, then others). BIOS files and folders such as `bios`, `saves`,
+Discs listed in an `.m3u` (including discs in subfolders such as `discs/` or `.hidden/`)
+and the tracks of a `.cue`/`.gdi` are hidden behind their playlist or cue sheet. A disc
+set without a playlist shows once and plays disc 1. Versions of the same game in one
+system fold into one entry (a chosen version, else USA, World, Europe, then others);
+titles in any script are compared by their letters and digits, ignoring Latin accents. BIOS files and folders such as `bios`, `saves`,
 `states`, `media` and `downloaded_media` are skipped. Up to 3,000 games are scanned.
 
 ## Controllers

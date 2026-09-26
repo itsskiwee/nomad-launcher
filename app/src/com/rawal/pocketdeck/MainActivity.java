@@ -53,6 +53,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.concurrent.ExecutorService;
@@ -639,6 +640,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             g.put("emuChoice", prefs.getString("emu.game." + id, ""));
             g.put("wsPatch", wsPatchState(g));
             if (prefs.getBoolean("hidden." + id, false)) g.put("hidden", true);
+            g.put("group", Library.groupKey(g.optString("system", "psp"), g.optString("title")));   // libraries saved by 0.4.0 used an ASCII-only key
             String title = prefs.getString("title." + id, null);
             if (title != null) g.put("title", title);
             Long clip = files.get(id + "-video.mp4");
@@ -1119,7 +1121,7 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                         Uri uri = Uri.parse(folder);
                         String leaf = folderName(folder);
                         Systems.System root = Systems.forFolder(leaf.substring(leaf.lastIndexOf('/') + 1).trim());
-                        walk(uri, DocumentsContract.getTreeDocumentId(uri), 0, found, new int[] { 0 }, root == null ? Systems.PSP : root, known);
+                        walk(uri, DocumentsContract.getTreeDocumentId(uri), 0, found, new int[] { 0 }, root == null ? Systems.PSP : root, known, new HashSet<>());
                     } catch (Exception e) {
                         Log.w("PocketDeck", "Scan " + folder, e);
                         broken.add(folderName(folder));
@@ -1301,10 +1303,13 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         return sb.toString();
     }
 
-    private void walk(Uri tree, String documentId, int depth, JSONArray out, int[] visited, Systems.System system, Map<String, JSONObject> known) throws Exception {
+    /** `listed`: paths relative to this folder that a playlist further up already covers. */
+    private void walk(Uri tree, String documentId, int depth, JSONArray out, int[] visited, Systems.System system,
+                      Map<String, JSONObject> known, Set<String> listed) throws Exception {
         if (depth > 8) throw new IOException("Folder exceeds scan limit");
         if (visited[0] > 20000) throw new IOException("Folder exceeds scan limit");
         List<String[]> files = new ArrayList<>();   // document id, name, size
+        List<String[]> dirs = new ArrayList<>();    // document id, name
         try (Cursor cursor = getContentResolver().query(DocumentsContract.buildChildDocumentsUriUsingTree(tree, documentId),
                 new String[] { "document_id", "_display_name", "mime_type", "_size" }, null, null, null)) {
             if (cursor == null) throw new IOException("No folder access");
@@ -1313,19 +1318,15 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 visited[0]++;
                 String id = cursor.getString(0), name = cursor.getString(1), mime = cursor.getString(2);
                 if (name == null || name.startsWith(".")) continue;
-                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) {
-                    // A folder named after a console ("N64", "PS2", "snes") tags everything inside it.
-                    Systems.System sub = Systems.forFolder(name);
-                    if (sub == null && SKIP_DIRS.contains(name.toLowerCase(Locale.ROOT))) continue;
-                    walk(tree, id, depth + 1, out, visited, sub == null ? system : sub, known);
-                    continue;
-                }
+                if (DocumentsContract.Document.MIME_TYPE_DIR.equals(mime)) { dirs.add(new String[] { id, name }); continue; }
                 files.add(new String[] { id, name, cursor.isNull(3) ? "0" : cursor.getString(3) });
             }
         }
         // Files that are part of another entry: discs listed in a playlist, tracks of a cue sheet,
         // and every disc after the first of a set that has no playlist.
         HashSet<String> hidden = new HashSet<>();
+        Set<String> nested = new HashSet<>();   // playlist paths into subfolders
+        for (String p : listed) (p.indexOf('/') < 0 ? hidden : nested).add(p);
         Map<String, Integer> discCount = new HashMap<>();
         Map<String, String[]> firstDisc = new HashMap<>();
         for (String[] f : files) {
@@ -1334,9 +1335,10 @@ public class MainActivity extends Activity implements MediaHub.Listener {
                 try (java.io.BufferedReader in = new java.io.BufferedReader(new java.io.InputStreamReader(
                         getContentResolver().openInputStream(DocumentsContract.buildDocumentUriUsingTree(tree, f[0])), "UTF-8"))) {
                     for (String line; (line = in.readLine()) != null; ) {
-                        line = line.trim();
-                        if (line.isEmpty() || line.startsWith("#")) continue;
-                        hidden.add(line.substring(Math.max(line.lastIndexOf('/'), line.lastIndexOf('\\')) + 1).toLowerCase(Locale.ROOT));
+                        String entry = Library.playlistEntry(line);
+                        if (entry == null) continue;
+                        hidden.add(entry.substring(entry.lastIndexOf('/') + 1));
+                        if (entry.indexOf('/') >= 0) nested.add(entry);
                     }
                 } catch (Exception e) { Log.w("PocketDeck", "Playlist " + f[1], e); }
             } else if (lower.endsWith(".cue") || lower.endsWith(".gdi")) {
@@ -1396,10 +1398,16 @@ public class MainActivity extends Activity implements MediaHub.Listener {
             JSONObject entry = new JSONObject().put("id", key).put("uri", doc.toString()).put("title", title).put("filename", name)
                 .put("discId", art.discId).put("icon", art.icon).put("background", art.background).put("system", system.id)
                 .put("size", Long.parseLong(f[2])).put("format", lower.substring(lower.lastIndexOf('.') + 1).toUpperCase(Locale.ROOT))
-                .put("group", system.id + "|" + title.toLowerCase(Locale.ROOT).replaceAll("[^a-z0-9]+", ""))
+                .put("group", Library.groupKey(system.id, title))
                 .put("version", versionLabel(name)).put("serial", serial).put("crc", crc);
             if (discCount.containsKey(set) && discCount.get(set) > 1) entry.put("discs", discCount.get(set));
             out.put(entry);
+        }
+        for (String[] d : dirs) {
+            // A folder named after a console ("N64", "PS2", "snes") tags everything inside it.
+            Systems.System sub = Systems.forFolder(d[1]);
+            if (sub == null && SKIP_DIRS.contains(d[1].toLowerCase(Locale.ROOT))) continue;
+            walk(tree, d[0], depth + 1, out, visited, sub == null ? system : sub, known, Library.inside(nested, d[1]));
         }
     }
 
@@ -1649,8 +1657,9 @@ public class MainActivity extends Activity implements MediaHub.Listener {
         /** Which version of a game (region, revision) its library entry plays. */
         @JavascriptInterface public void setVersion(String id) {
             JSONObject g = findGame(id);
-            if (g == null || g.optString("group").isEmpty()) return;
-            prefs.edit().putString("version." + g.optString("group"), id).apply();
+            String group = g == null ? "" : Library.groupKey(g.optString("system", "psp"), g.optString("title"));
+            if (group.isEmpty()) return;
+            prefs.edit().putString("version." + group, id).apply();
             sendState();
         }
         @JavascriptInterface public void wsPatch(String id, boolean on) {
