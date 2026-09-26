@@ -77,7 +77,12 @@ New installations keep root features off. Enable them in Settings → Device onl
 on a device where you intend to grant Nomad superuser access. Existing dedicated-
 device installs retain their previous root behavior when upgrading.
 
-- Performance profiles validate `begonia` CPU/GPU tables and reject unknown hardware.
+- Performance profiles validate `begonia` CPU/GPU tables and reject unknown hardware. A kernel
+  may add calibrated GPU steps above the stock 806 MHz (up to 900 MHz) as long as the 28 stock
+  steps follow unchanged; Performance and Turbo then use the highest step.
+- Turbo requests the top DRAM step through the dvfsrc PM QoS node. Every other mode, including
+  Balanced, withdraws that request. Thermal and battery limits still apply, and the tab reports
+  when they cap the GPU.
 - Balanced restores the baseline captured for the current boot. Other root tools
   changing the same controls can invalidate the expected state.
 - Restore Balanced before disabling root features; disabling prevents new root

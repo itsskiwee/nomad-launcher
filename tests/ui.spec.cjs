@@ -85,6 +85,30 @@ test('performance selection, queued apply and root failure are represented accur
   await expect(page.locator('#liveCpu')).toHaveText('—');
   expect(errors).toEqual([]);
 });
+test('performance tab reflects an overclocked kernel and the measured GPU clock', async ({ page }) => {
+  const errors = await openApp(page);
+  await page.evaluate(() => { goPage('settings'); showSection('performance'); });
+  const status = { available: true, active: 'turbo', request: 'status', cpu0: '2000000', cpu1: '2050000', gpu: '850000', gpuMax: '850000', gpuTop: '850000', gpuReal: '849976', ddr: '4266000', pllFailures: '0', cpu0max: '2000000', cpu1max: '2050000', temperature: '350' };
+  await page.evaluate(s => receivePerformance(s), status);
+  await expect(page.locator('#modeGpu')).toHaveText('850 MHz requested (overclocked)');
+  await expect(page.locator('#liveGpu')).toHaveText('850 MHz');
+  await expect(page.locator('#liveMemory')).toHaveText('4266 MHz');
+  await expect(page.locator('#performanceStatus')).not.toContainText('failures');
+  await page.locator('[data-mode="performance"]').click();
+  await expect(page.locator('#modeGpu')).toHaveText('595–850 MHz');
+  await page.evaluate(s => receivePerformance({ ...s, gpuReal: '0', pllFailures: '3' }), status);
+  await expect(page.locator('#liveGpu')).toHaveText('Idle');
+  await expect(page.locator('#performanceStatus')).toContainText('GPU clock check reported 3 failures');
+  await expect(page.locator('#performanceStatus')).not.toContainText('held at');
+  await page.evaluate(s => receivePerformance({ ...s, gpuLimit: '706000', gpuLimitBy: 'thermal' }), status);
+  await expect(page.locator('#performanceStatus')).toContainText('GPU held at 706 MHz by thermal protection');
+  // An older controller without the measured fields falls back to the requested clock.
+  const { gpuReal, gpuTop, ddr, pllFailures, ...stock } = status;
+  await page.evaluate(s => receivePerformance(s), { ...stock, gpu: '806000' });
+  await expect(page.locator('#liveGpu')).toHaveText('806 MHz');
+  await expect(page.locator('#liveMemory')).toHaveText('—');
+  expect(errors).toEqual([]);
+});
 test('blocked video pixel access preserves the usable interface', async ({ page }) => {
   const errors = await openApp(page);
   await page.evaluate(() => {

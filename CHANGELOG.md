@@ -5,6 +5,22 @@ All notable changes to Nomad Launcher. Each release has fuller notes in
 
 ## Unreleased
 
+### Added
+
+- Turbo also holds memory (DRAM) at its top 4266 MHz step. Other modes withdraw the request and
+  leave memory scaling to the phone.
+- The Performance tab has a Memory reading, and says when thermal or battery protection is
+  holding the GPU below the mode's clock.
+
+### Improved
+
+- Performance profiles work on kernels that add GPU steps above 806 MHz (for example a
+  custom kernel that enables 835 and 850 MHz). The stock GPU table must still be present
+  unchanged underneath; Saver and Performance keep their stock floors, and Performance and Turbo
+  use the new top step. Unknown tables are still rejected.
+- The Performance tab shows the measured GPU clock (from the chip's clock meter, "Idle" between
+  frames) instead of the requested one, and the running kernel's top GPU step in the mode details.
+
 ## [0.4.1](https://github.com/itsskiwee/nomad-launcher/releases/tag/v0.4.1) — 2026-09-25
 
 ### Fixed

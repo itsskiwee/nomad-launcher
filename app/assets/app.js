@@ -1180,9 +1180,11 @@ window.addEventListener('resize', () => { if (page === 'home') renderHome(); });
 const performanceModes = {
   saver: { title: 'Power saver', cpu: 'Up to 1.375 / 1.419 GHz', gpu: 'Up to 545 MHz', note: 'About 70% of peak clocks. Frequencies still scale down at idle.' },
   balanced: { title: 'Balanced', cpu: 'Original limits and governors', gpu: 'Original frequency bounds', note: 'Restores the controls saved before the first change this boot.' },
-  performance: { title: 'Performance', cpu: '0.975–2.0 / 1.002–2.05 GHz', gpu: '595–806 MHz', note: 'Higher minimum clocks for responsiveness. No overclock.' },
-  turbo: { title: 'Turbo', cpu: '2.0 / 2.05 GHz requested', gpu: '806 MHz requested', note: 'Maximum supported clocks. More heat and battery use; thermal protection stays on.' }
+  performance: { title: 'Performance', cpu: '0.975–2.0 / 1.002–2.05 GHz', gpu: top => '595–' + top + ' MHz', note: top => 'Higher minimum clocks for responsiveness.' + (top > 806 ? ' Uses the kernel’s ' + top + ' MHz GPU step.' : ' No overclock.') },
+  turbo: { title: 'Turbo', cpu: '2.0 / 2.05 GHz requested', gpu: top => top + ' MHz requested' + (top > 806 ? ' (overclocked)' : ''), note: () => 'Maximum CPU and GPU clocks, and memory held at 4266 MHz. Most heat and battery use; thermal protection stays on.' }
 };
+// Highest GPU step in the running kernel's table: 806 on stock, higher on an overclocked kernel.
+let gpuTopMhz = 806;
 let selectedMode = 'balanced', activeMode = '', performanceBusy = false, performanceAvailable = false;
 let performanceTimer, performanceTimeout, syncSelection = true, performanceRequest = 'status', queuedPerformance = '';
 
@@ -1206,8 +1208,9 @@ function previewPerformance(mode) {
   if (!profile) return;
   selectedMode = mode;
   $('modeCpu').textContent = profile.cpu;
-  $('modeGpu').textContent = profile.gpu;
-  $('modeNote').textContent = profile.note;
+  const text = value => typeof value === 'function' ? value(gpuTopMhz) : value;
+  $('modeGpu').textContent = text(profile.gpu);
+  $('modeNote').textContent = text(profile.note);
   renderPerformanceControls();
 }
 function requestPerformance(mode = 'status') {
@@ -1240,21 +1243,28 @@ window.receivePerformance = result => {
     queuedPerformance = '';
     activeMode = '';
     $('performanceStatus').textContent = result.error || 'Root controls unavailable.';
-    $('liveCpu').textContent = $('liveGpu').textContent = $('liveTemperature').textContent = '—';
+    $('liveCpu').textContent = $('liveGpu').textContent = $('liveMemory').textContent = $('liveTemperature').textContent = '—';
     renderPerformanceControls(); return;
   }
   activeMode = result.active;
+  const top = Math.round(Number(result.gpuTop) / 1000);
+  if (top > 0 && top !== gpuTopMhz) { gpuTopMhz = top; previewPerformance(selectedMode); }
   if (syncSelection || result.request !== 'status') {
     if (performanceModes[activeMode]) previewPerformance(activeMode);
     syncSelection = false;
   }
   const mhz = value => Number.isFinite(Number(value)) && Number(value) > 0 ? Math.round(Number(value) / 1000) : '—';
   $('liveCpu').textContent = mhz(result.cpu0) + ' / ' + mhz(result.cpu1) + ' MHz';
-  $('liveGpu').textContent = mhz(result.gpu) + ' MHz';
+  // Prefer the SoC clock meter over the requested frequency; 0 means power-gated between frames.
+  if (result.gpuReal === undefined || result.gpuReal === '') $('liveGpu').textContent = mhz(result.gpu) + ' MHz';
+  else $('liveGpu').textContent = Number(result.gpuReal) > 0 ? mhz(result.gpuReal) + ' MHz' : 'Idle';
+  $('liveMemory').textContent = Number(result.ddr) > 0 ? mhz(result.ddr) + ' MHz' : '—';
   $('liveTemperature').textContent = Number.isFinite(Number(result.temperature)) ? (Number(result.temperature) / 10).toFixed(1) + ' °C' : '—';
   const name = performanceModes[activeMode]?.title;
   $('performanceStatus').textContent = name
     ? name + ' active · caps ' + mhz(result.cpu0max) + ' / ' + mhz(result.cpu1max) + ' MHz CPU, ' + mhz(result.gpuMax) + ' MHz GPU'
+      + (Number(result.gpuLimit) > 0 ? ' · GPU held at ' + mhz(result.gpuLimit) + ' MHz by ' + (result.gpuLimitBy === 'thermal' ? 'thermal protection' : result.gpuLimitBy + ' protection') : '')
+      + (Number(result.pllFailures) > 0 ? ' · GPU clock check reported ' + result.pllFailures + ' failures' : '')
     : 'Controls were changed outside Nomad. Select a mode to apply it again.';
   if (result.request && result.request !== 'status' && !(page === 'settings' && section === 'performance')) notify((name || 'Mode') + ' active');
   renderPerformanceControls();
