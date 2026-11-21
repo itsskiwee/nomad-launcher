@@ -41,7 +41,7 @@ final class Library extends SQLiteOpenHelper {
         final Uri uri;
         final String root, title, filename, mime;
         final GameSystem system;
-        final Uri art;
+        final Uri art, backdrop;
         final boolean favorite;
 
         Game(Cursor row) {
@@ -52,7 +52,8 @@ final class Library extends SQLiteOpenHelper {
             mime = row.getString(4);
             system = GameSystem.valueOf(row.getString(5));
             art = row.isNull(6) ? null : Uri.parse(row.getString(6));
-            favorite = row.getInt(7) == 1;
+            backdrop = row.isNull(7) ? null : Uri.parse(row.getString(7));
+            favorite = row.getInt(8) == 1;
         }
     }
 
@@ -94,21 +95,25 @@ final class Library extends SQLiteOpenHelper {
     }
 
     private Library(Context context) {
-        super(context, "nomad-library.db", null, 1);
+        super(context, "nomad-library.db", null, 2);
         resolver = context.getContentResolver();
     }
 
     @Override public void onCreate(SQLiteDatabase db) {
         db.execSQL("CREATE TABLE folders (uri TEXT PRIMARY KEY, name TEXT NOT NULL)");
         db.execSQL("CREATE TABLE games (uri TEXT NOT NULL, root TEXT NOT NULL, title TEXT NOT NULL, "
-                + "filename TEXT NOT NULL, mime TEXT, system TEXT NOT NULL, art TEXT, PRIMARY KEY (root, uri))");
+                + "filename TEXT NOT NULL, mime TEXT, system TEXT NOT NULL, art TEXT, backdrop TEXT, PRIMARY KEY (root, uri))");
         db.execSQL("CREATE INDEX games_by_title ON games(title COLLATE NOCASE)");
         db.execSQL("CREATE TABLE marks (uri TEXT NOT NULL, root TEXT NOT NULL, favorite INTEGER NOT NULL DEFAULT 0, "
                 + "played INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (root, uri))");
     }
 
     @Override public void onUpgrade(SQLiteDatabase db, int before, int after) {
-        throw new IllegalStateException("Missing library migration");
+        if (before == 1 && after == 2) {
+            db.execSQL("ALTER TABLE games ADD COLUMN backdrop TEXT");
+        } else {
+            throw new IllegalStateException("Missing library migration");
+        }
     }
 
     List<Folder> folders() {
@@ -244,7 +249,9 @@ final class Library extends SQLiteOpenHelper {
             db.delete("games", "root=?", new String[]{folder.uri});
             for (int i = 0; i < games.size(); i++) {
                 ContentValues game = games.get(i);
-                game.put("art", artwork.get(artworkKeys.get(i)));
+                String key = artworkKeys.get(i);
+                game.put("art", artwork.get(key));
+                game.put("backdrop", artwork.get(key + ".backdrop"));
                 db.replaceOrThrow("games", null, game);
             }
             db.setTransactionSuccessful();
@@ -284,7 +291,7 @@ final class Library extends SQLiteOpenHelper {
     }
 
     private List<Game> query(Shelf shelf, GameSystem system, String text, int offset, int limit) {
-        StringBuilder sql = new StringBuilder("SELECT g.uri,g.root,g.title,g.filename,g.mime,g.system,g.art,"
+        StringBuilder sql = new StringBuilder("SELECT g.uri,g.root,g.title,g.filename,g.mime,g.system,g.art,g.backdrop,"
                 + "coalesce(m.favorite,0) FROM games g LEFT JOIN marks m ON m.root=g.root AND m.uri=g.uri WHERE 1=1");
         ArrayList<String> args = new ArrayList<>();
         if (shelf == Shelf.FAVORITES) sql.append(" AND m.favorite=1");

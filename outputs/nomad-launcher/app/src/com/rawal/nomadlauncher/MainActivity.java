@@ -43,13 +43,14 @@ import java.util.List;
 
 public final class MainActivity extends Activity {
     private static final int PICK_FOLDER = 10;
-    private static final int BACKGROUND = 0xff0c1118;
-    private static final int TEXT = 0xfff3f6f4;
-    private static final int MUTED = 0xffa7b4bf;
-    private static final int BLUE = 0xffa0e4e3;
-    private static final int PANEL = 0xff19242f;
-    private static final int LINE = 0xff303d49;
+    private static final int BACKGROUND = 0xff0b111a;
+    private static final int TEXT = 0xfff3f6fc;
+    private static final int MUTED = 0xffafbbce;
+    private static final int BLUE = 0xffc0d8ff;
+    private static final int PANEL = 0xff192437;
+    private static final int LINE = 0xff354156;
     private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
+    private static final Typeface LIGHT = Typeface.create("sans-serif-light", Typeface.NORMAL);
     private static final int MATCH = LinearLayout.LayoutParams.MATCH_PARENT;
     private static final int WRAP = LinearLayout.LayoutParams.WRAP_CONTENT;
 
@@ -127,8 +128,9 @@ public final class MainActivity extends Activity {
         int width = getResources().getConfiguration().screenWidthDp;
         int gutter = pageGutter();
         boolean wide = width >= 620;
+        boolean home = screen == Screen.HOME;
         LinearLayout root = column();
-        root.setBackgroundColor(BACKGROUND);
+        if (!home) root.setBackgroundColor(BACKGROUND);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars()
@@ -148,20 +150,23 @@ public final class MainActivity extends Activity {
         mark.setImageResource(R.drawable.nomad);
         mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         brand.addView(mark, dimensions(27, 27));
-        if (width >= 420) {
+        if (width >= 480) {
             TextView name = label("NOMAD", 14, TEXT, true);
             name.setLetterSpacing(.19f);
             name.setPadding(dp(9), 0, 0, 0);
             brand.addView(name, dimensions(WRAP, 50));
         }
-        top.addView(brand, new LinearLayout.LayoutParams(0, WRAP, 1));
+        LinearLayout.LayoutParams brandSpace = dimensions(WRAP, 50);
+        brandSpace.setMarginEnd(dp(wide ? 24 : 6));
+        top.addView(brand, brandSpace);
         topTabs = row();
         addTab(topTabs, "Home", Screen.HOME);
         addTab(topTabs, "Library", Screen.LIBRARY);
+        topTabs.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
         addTab(topTabs, "Settings", Screen.SETTINGS);
-        top.addView(topTabs, dimensions(WRAP, 50));
+        top.addView(topTabs, new LinearLayout.LayoutParams(0, dp(50), 1));
         root.addView(top, dimensions(MATCH, WRAP));
-        addDivider(root);
+        if (!home) addDivider(root);
 
         activityStatus = label("", 13, BLUE, false);
         activityStatus.setPadding(dp(20), 0, dp(20), 0);
@@ -173,14 +178,24 @@ public final class MainActivity extends Activity {
         scroller.setClipToPadding(false);
         scroller.setVerticalScrollBarEnabled(false);
         scroller.setFocusable(false);
+        scroller.setFillViewport(home);
         body = column();
-        body.setPadding(dp(gutter), dp(wide ? 22 : 14), dp(gutter), dp(24));
+        body.setPadding(dp(gutter), dp(home ? 6 : wide ? 22 : 14), dp(gutter), dp(home ? 42 : 24));
         scroller.addView(body, new ScrollView.LayoutParams(MATCH, WRAP));
         root.addView(scroller, new LinearLayout.LayoutParams(MATCH, 0, 1));
-        setContentView(root);
+        heroArt = null;
+        if (home) {
+            FrameLayout scene = new FrameLayout(this);
+            scene.setBackgroundColor(BACKGROUND);
+            heroArt = new Artwork(this, true);
+            scene.addView(heroArt, new FrameLayout.LayoutParams(MATCH, MATCH));
+            scene.addView(root, new FrameLayout.LayoutParams(MATCH, MATCH));
+            setContentView(scene);
+        } else {
+            setContentView(root);
+        }
         root.requestApplyInsets();
 
-        heroArt = null;
         homeRail = null;
         homeFilters = null;
         homeScroller = null;
@@ -235,29 +250,32 @@ public final class MainActivity extends Activity {
 
     private void buildHome(boolean wide) {
         boolean hasGames = !snapshot.games.isEmpty();
-        android.content.res.Configuration config = getResources().getConfiguration();
-        boolean sideBySide = wide && config.screenWidthDp >= config.screenHeightDp;
-        LinearLayout stage = sideBySide ? row() : column();
+        if (hasGames) {
+            homeRail = column();
+            body.addView(homeRail, dimensions(MATCH, WRAP));
+        }
+        body.addView(new View(this), new LinearLayout.LayoutParams(MATCH, dp(wide ? 86 : 72), 1));
         LinearLayout caption = column();
-        caption.setGravity(Gravity.CENTER_VERTICAL);
-        caption.setPadding(0, dp(sideBySide ? 4 : 20), dp(sideBySide ? 32 : 0), dp(sideBySide ? 4 : 20));
-
-        heroLabel = label("", 13, BLUE, true);
+        heroLabel = label("", 14, BLUE, true);
+        heroLabel.setLetterSpacing(.06f);
         caption.addView(heroLabel, dimensions(MATCH, WRAP));
-        heroTitle = label("", wide ? 52 : 38, TEXT, true);
-        heroTitle.setTypeface(MEDIUM);
-        heroTitle.setLetterSpacing(-.035f);
+        heroTitle = label("", wide ? 52 : 38, TEXT, false);
+        heroTitle.setTypeface(LIGHT);
+        heroTitle.setLetterSpacing(-.025f);
         heroTitle.setMaxLines(2);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
-        heroTitle.setPadding(0, dp(8), 0, dp(8));
+        heroTitle.setPadding(0, dp(5), 0, dp(5));
         caption.addView(heroTitle, dimensions(MATCH, WRAP));
         heroHint = label("", 16, MUTED, false);
         caption.addView(heroHint, dimensions(MATCH, WRAP));
 
         LinearLayout actions = row();
-        actions.setPadding(0, dp(22), 0, 0);
+        actions.setPadding(0, dp(19), 0, 0);
         heroPlay = button("", "hero-play", true, this::activateHero);
-        actions.addView(heroPlay, dimensions(WRAP, 50));
+        heroPlay.setBackground(shape(TEXT, Color.TRANSPARENT, 24));
+        heroPlay.setForeground(focusRing(24));
+        heroPlay.setPadding(dp(24), 0, dp(24), 0);
+        actions.addView(heroPlay, dimensions(WRAP, 48));
         heroFavorite = button("☆", "hero-favorite", false, () -> {
             if (selected != null) toggleFavorite(selected);
         });
@@ -267,25 +285,16 @@ public final class MainActivity extends Activity {
         heroOptions.setContentDescription("Game options");
         for (Button action : new Button[]{heroFavorite, heroOptions}) {
             action.setTextSize(22);
-            LinearLayout.LayoutParams box = dimensions(50, 50);
+            action.setBackground(shape(0x40070e18, 0x737a8ca4, 24));
+            action.setForeground(focusRing(24));
+            action.setPadding(0, 0, 0, 0);
+            LinearLayout.LayoutParams box = dimensions(48, 48);
             box.setMarginStart(dp(8));
             actions.addView(action, box);
         }
         caption.addView(actions, dimensions(MATCH, WRAP));
-
-        heroArt = new Artwork(this, true);
-        if (sideBySide) {
-            stage.addView(caption, new LinearLayout.LayoutParams(0, WRAP, 1f));
-            stage.addView(heroArt, new LinearLayout.LayoutParams(0, MATCH, 1.1f));
-            int stageHeight = Math.max(300, Math.min(config.screenHeightDp / 2, 490));
-            body.addView(stage, dimensions(MATCH, stageHeight));
-        } else {
-            int artHeight = wide ? Math.min(390, (config.screenWidthDp - 2 * pageGutter()) * 9 / 16) : 205;
-            if (hasGames) stage.addView(heroArt, dimensions(MATCH, artHeight));
-            stage.addView(caption, dimensions(MATCH, WRAP));
-            if (!hasGames) stage.addView(heroArt, dimensions(MATCH, artHeight));
-            body.addView(stage, dimensions(MATCH, WRAP));
-        }
+        int captionWidth = getResources().getConfiguration().screenWidthDp - 2 * pageGutter();
+        body.addView(caption, dimensions(Math.min(captionWidth, 620), WRAP));
 
         Library.Game previous = selected;
         selected = null;
@@ -298,13 +307,7 @@ public final class MainActivity extends Activity {
             selected = snapshot.recent.isEmpty() ? snapshot.games.get(0) : snapshot.recent.get(0);
         }
         if (ready && hasGames) selectionToRestore = null;
-        if (hasGames) {
-            homeRail = column();
-            LinearLayout.LayoutParams railSpace = dimensions(MATCH, WRAP);
-            railSpace.topMargin = dp(15);
-            body.addView(homeRail, railSpace);
-            renderHomeRail();
-        }
+        if (hasGames) renderHomeRail();
         showHero(selected);
     }
 
@@ -339,27 +342,38 @@ public final class MainActivity extends Activity {
 
     private void wireHomeFocus() {
         View home = topTabs.findViewWithTag("tab-HOME");
-        for (int i = 0; i < topTabs.getChildCount(); i++) {
-            topTabs.getChildAt(i).setNextFocusDownId(heroPlay.getId());
-        }
         View activeFilter = homeFilters == null ? null : homeFilters.findViewWithTag("shelf-" + homeShelf.name());
         int filterId = activeFilter == null ? View.NO_ID : activeFilter.getId();
-        for (Button action : new Button[]{heroPlay, heroFavorite, heroOptions}) {
-            action.setNextFocusUpId(home.getId());
-            action.setNextFocusDownId(filterId);
+        int playId = heroPlay.getId();
+        for (int i = 0; i < topTabs.getChildCount(); i++) {
+            topTabs.getChildAt(i).setNextFocusDownId(activeFilter == null ? playId : filterId);
         }
-        if (homeFilters == null) return;
 
+        View browse = homeRail == null ? null : homeRail.findViewWithTag("browse");
+        boolean browseBelowTiles = browse != null && browse.getParent() == homeRail;
         View entry = homeCards.isEmpty() ? null : homeCards.get(0);
         for (View card : homeCards) {
             card.setNextFocusUpId(filterId);
+            card.setNextFocusDownId(browseBelowTiles ? browse.getId() : playId);
             if (card.isSelected()) entry = card;
         }
+        int entryId = entry == null ? playId : entry.getId();
+        int actionUp = entry != null ? entryId : activeFilter == null ? home.getId() : filterId;
+        if (browseBelowTiles) {
+            browse.setNextFocusUpId(entryId);
+            browse.setNextFocusDownId(playId);
+            actionUp = browse.getId();
+        }
+        for (Button action : new Button[]{heroPlay, heroFavorite, heroOptions}) {
+            action.setNextFocusUpId(actionUp);
+        }
+        if (homeFilters == null) return;
+
         for (int i = 0; i < homeFilters.getChildCount(); i++) {
             View filter = homeFilters.getChildAt(i);
             if (!filter.isFocusable()) continue;
-            filter.setNextFocusUpId(heroPlay.getId());
-            filter.setNextFocusDownId(entry == null ? View.NO_ID : entry.getId());
+            filter.setNextFocusUpId(home.getId());
+            filter.setNextFocusDownId(entryId);
         }
     }
 
@@ -386,7 +400,6 @@ public final class MainActivity extends Activity {
         homeRail.removeAllViews();
         homeCards.clear();
         homeScroller = null;
-        addDivider(homeRail);
         homeFilters = row();
         homeFilters.addView(shelfTab("All games", Library.Shelf.ALL), dimensions(WRAP, 48));
         homeFilters.addView(shelfTab("Favorites", Library.Shelf.FAVORITES), dimensions(WRAP, 48));
@@ -402,7 +415,8 @@ public final class MainActivity extends Activity {
             String empty = homeShelf == Library.Shelf.FAVORITES ? "No favorites yet." : "No games launched yet.";
             homeRail.addView(label(empty, 15, MUTED, false), dimensions(MATCH, 58));
         } else {
-            addRail(homeRail, games, "home", 0, games.size(), 150);
+            int size = getResources().getConfiguration().screenWidthDp >= 900 ? 108 : 92;
+            addRail(homeRail, games, "home", 0, games.size(), size);
         }
         if (!wide && !games.isEmpty()) homeRail.addView(browseButton, dimensions(WRAP, 48));
     }
@@ -459,13 +473,14 @@ public final class MainActivity extends Activity {
         artwork.setForeground(tileRing());
         artwork.setDuplicateParentStateEnabled(true);
         artwork.show(game);
-        card.addView(artwork, dimensions(MATCH, width * 2 / 3));
-        TextView title = label(game.title + (game.favorite ? "  ★" : ""), 14, TEXT, true);
+        boolean homeTile = key.equals("home");
+        card.addView(artwork, dimensions(MATCH, homeTile ? width : width * 2 / 3));
+        TextView title = label(game.title + (game.favorite ? "  ★" : ""), homeTile ? 13 : 14, TEXT, !homeTile);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
         title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         card.addView(title, dimensions(MATCH, 30));
-        if (!key.equals("home")) {
+        if (!homeTile) {
             TextView type = label(game.system.label, 12, MUTED, false);
             type.setSingleLine(true);
             type.setEllipsize(TextUtils.TruncateAt.END);
@@ -478,7 +493,7 @@ public final class MainActivity extends Activity {
         card.setOnClickListener(view -> {
             if (screen != Screen.HOME) {
                 gameActions(game);
-            } else if (sameGame(game, selected)) {
+            } else if (view.hasFocus() && !view.isInTouchMode()) {
                 play(game);
             } else {
                 showHero(game);
@@ -1045,6 +1060,10 @@ public final class MainActivity extends Activity {
 
     private Button tab(String text, String key, boolean active, Runnable action) {
         Button tab = button(text, key, false, action);
+        if (getResources().getConfiguration().screenWidthDp < 380) {
+            tab.setMinWidth(dp(48));
+            tab.setPadding(dp(9), 0, dp(9), 0);
+        }
         tab.setTextColor(active ? TEXT : MUTED);
         tab.setSelected(active);
         if (active) {
