@@ -1,0 +1,34 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.rawal.nomadlauncher" android:versionCode="1" android:versionName="0.1.0">
+    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="36" />
+    <queries>
+        <package android:name="org.ppsspp.ppsspp" />
+        <package android:name="org.ppsspp.ppssppgold" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="content" android:mimeType="*/*" />
+        </intent>
+    </queries>
+    <application android:label="Nomad Launcher" android:icon="@drawable/nomad"
+        android:theme="@style/NomadTheme" android:allowBackup="false" android:supportsRtl="true">
+        <activity android:name=".MainActivity" android:exported="true"
+            android:windowSoftInputMode="adjustResize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+        <activity-alias android:name=".Home" android:targetActivity=".MainActivity"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.HOME" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity-alias>
+    </application>
+</manifest>
