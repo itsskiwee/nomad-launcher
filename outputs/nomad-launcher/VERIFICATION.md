@@ -1,5 +1,11 @@
 # Verification
 
+## Console menus · 0.4.0
+
+Installed the signed build in the Android 9 emulator and exercised the existing folder grant, the Library cover grid, search and clearing, shelf and system filters, favorites, folder selection and management, the disconnect confirmation, emulator preferences, and the Android Home setting. Checked landscape, tablet portrait, and a 320 dp portrait window. Injected D-pad and A/B input to move through Settings, choose a filter, and dismiss a prompt. A temporary receiver confirmed the game handoff allowed reading the selected file and denied access to a sibling.
+
+Nomad styles its own menus, dialogs, and feedback. Android provides the folder picker, on-screen keyboard, and default Home chooser.
+
 ## Console Home · 0.3.0
 
 Verified an in-place upgrade from 0.2.0 in the Android 9 emulator. The folder grant, games, favorite, and recent launch survived the database migration. Verified touch selection, D-pad movement from the shelf to a tile and Play, and injected A/B actions. Inspected landscape, tablet portrait, and narrow portrait. Confirmed that a separate local cover supplies a tile and that a widescreen backdrop takes over the Home screen. Selecting a game without artwork restores the bundled coast scene. The Galaxy Tab was disconnected during this pass.

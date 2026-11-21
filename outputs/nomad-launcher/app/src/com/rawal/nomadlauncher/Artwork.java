@@ -35,6 +35,7 @@ final class Artwork extends View {
     private static volatile Bitmap wallpaper;
 
     private final boolean featured;
+    private boolean quietBackdrop;
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.FILTER_BITMAP_FLAG);
     private final Rect source = new Rect();
     private final Rect destination = new Rect();
@@ -53,6 +54,10 @@ final class Artwork extends View {
         super(context);
         this.featured = featured;
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+    }
+
+    void dimForMenu() {
+        quietBackdrop = true;
     }
 
     void show(Library.Game game) {
@@ -183,6 +188,7 @@ final class Artwork extends View {
         paint.setShader(verticalShade);
         canvas.drawRect(0, 0, width, height, paint);
         paint.setShader(null);
+        if (quietBackdrop) canvas.drawColor(0x99070e19);
     }
 
     private Bitmap getWallpaper() {

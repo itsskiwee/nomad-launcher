@@ -26,7 +26,7 @@ The Windows build uses the JDK and SDK directly. It signs the sideload APK with 
 
 1. Choose **Connect folder** and grant read access in Android’s folder picker. Connect additional folders from **Settings**. Nomad stores a local index and leaves the original files in place.
 2. On **Home**, switch between **All games**, **Favorites**, and **Recent**. Tap a cover or move focus onto it to preview the game. Use **Play** or confirm on the focused cover to launch. The star toggles favorites and the options menu lets you choose an emulator. Use **Library** to search titles and filter by system.
-3. Use **Settings → Manage folders** to rescan or disconnect a folder. **Clear artwork cache** discards the in-memory thumbnails. Add a PNG, JPEG, or WebP with the same basename next to a game or inside a neighboring `covers` or `artwork` directory. For example, `Game.png` supplies a tile cover and `Game.backdrop.jpg` supplies a widescreen backdrop for `Game.gba`. Rescan after adding images.
+3. Use **Settings → Game folders → Manage folders** to rescan or disconnect a folder. **Clear artwork cache** discards the in-memory thumbnails. Add a PNG, JPEG, or WebP with the same basename next to a game or inside a neighboring `covers` or `artwork` directory. For example, `Game.png` supplies a tile cover and `Game.backdrop.jpg` supplies a widescreen backdrop for `Game.gba`. Rescan after adding images.
 
 The scanner recognizes NES, Super Nintendo, Game Boy and Game Boy Color, Game Boy Advance, Mega Drive / Genesis, Master System, Game Gear, Nintendo 64, and Nintendo DS by file extension. PSP `.cso` and Dreamcast `.cdi` are also recognized. Put ambiguous disc files in an identifying folder such as `PS1`, `PSP`, or `Dreamcast`. For example, use `PS1/Game.chd` or `PSP/Game.iso`. Dreamcast is experimental. ZIP archives, CUE/BIN disc sets, and multi-disc playlists are outside this milestone.
 
@@ -36,7 +36,7 @@ Scans start on folder connection or when requested. Each folder is bounded to 12
 
 ## Restore Android Home or roll back
 
-- To use Nomad as Home, open **Settings → Default Home app** inside Nomad and select **Nomad Launcher**. To restore the previous launcher, use the same screen and select it. On the tested LineageOS device, the stock launcher is **Trebuchet** (`com.android.launcher3`). You can also open Android **Settings → Apps → Default apps → Home app** from the system settings.
+- To use Nomad as Home, open **Settings → Device → Default Home app** inside Nomad and select **Nomad Launcher**. To restore the previous launcher, use the same screen and select it. On the tested LineageOS device, the stock launcher is **Trebuchet** (`com.android.launcher3`). You can also open Android **Settings → Apps → Default apps → Home app** from the system settings.
 - To remove Nomad, restore the previous Home app, then uninstall Nomad through Android settings or run `adb uninstall com.rawal.nomadlauncher`. Uninstalling clears Nomad’s index, favorites, recent entries, and folder grants. Games and emulator data stay in place.
 - To roll back after an incompatible update or signing-key change, uninstall Nomad and sideload the previous APK. Reconnect your game folders afterward.
 
