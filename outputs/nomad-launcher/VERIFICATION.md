@@ -1,8 +1,14 @@
-# Galaxy Tab S6 Lite verification
+# Verification
 
-November 21, 2026 · Samsung SM-P615 (`gta4xl`) · LineageOS, Android 16
+## Dashboard redesign · 0.2.0
 
-## Device checks
+Built and installed the signed APK in an Android 9 emulator. Checked the empty dashboard, folder selection, local cover rendering, touch previews, favorites, recents, and library search using six synthetic filenames and one local PNG. Verified the landscape layout, tablet portrait, and narrow portrait. Injected D-pad events to verify that focus moves from the top bar to the play action, shelf controls, and game tiles. Injected gamepad A/B to confirm an action and dismiss its dialog. A temporary receiver verified read access to the selected file and denied access to its sibling. The physical tablet was unavailable for this pass.
+
+## Galaxy Tab S6 Lite · 0.1.0
+
+November 21, 2026 · Nomad Launcher 0.1.0 · Samsung SM-P615 (`gta4xl`) · LineageOS, Android 16
+
+### Device checks
 
 | Check | Result |
 | --- | --- |
@@ -12,7 +18,7 @@ November 21, 2026 · Samsung SM-P615 (`gta4xl`) · LineageOS, Android 16
 | Folder access and library | Chose a test folder in Android’s picker. Indexed four synthetic game files with no ROM data, ignored a text file, displayed local artwork, filtered by system and title, and checked favorite and recent entries across a process restart. Checked a manual rescan and removed the test folder from the app. |
 | Launch permissions | Verified the no-handler message and per-system app selection. A temporary Android test receiver read the selected file via `ACTION_VIEW` and was denied access to a sibling. The test used a receiver because no compatible emulator was available. Real game boot and PPSSPP were outside this device check. |
 
-## Idle memory
+### Idle memory
 
 For the empty-library measurement, force-stopped Nomad, opened stock Home, and waited eight seconds. Collected five readings about two seconds apart. Opened Nomad, waited eight seconds again, and collected the same number of readings. Measured system availability with `adb shell cat /proc/meminfo` and Nomad’s proportional set size (PSS) with `adb shell dumpsys meminfo com.rawal.nomadlauncher`. Airplane mode was on with Wi-Fi available.
 

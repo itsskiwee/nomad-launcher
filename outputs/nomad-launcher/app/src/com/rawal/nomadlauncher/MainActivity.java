@@ -6,7 +6,10 @@ import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.content.res.ColorStateList;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -40,11 +43,13 @@ import java.util.List;
 
 public final class MainActivity extends Activity {
     private static final int PICK_FOLDER = 10;
-    private static final int TEXT = 0xffedf4ff;
-    private static final int MUTED = 0xffafc1da;
-    private static final int BLUE = 0xffa7d0ff;
-    private static final int PANEL = 0xff132136;
-    private static final int LINE = 0xff2d405a;
+    private static final int BACKGROUND = 0xff0c1118;
+    private static final int TEXT = 0xfff3f6f4;
+    private static final int MUTED = 0xffa7b4bf;
+    private static final int BLUE = 0xffa0e4e3;
+    private static final int PANEL = 0xff19242f;
+    private static final int LINE = 0xff303d49;
+    private static final Typeface MEDIUM = Typeface.create("sans-serif-medium", Typeface.NORMAL);
     private static final int MATCH = LinearLayout.LayoutParams.MATCH_PARENT;
     private static final int WRAP = LinearLayout.LayoutParams.WRAP_CONTENT;
 
@@ -53,21 +58,26 @@ public final class MainActivity extends Activity {
     private Library library;
     private Emulators emulators;
     private Library.Snapshot snapshot = new Library.Snapshot();
+    private Library.Snapshot homeSnapshot = snapshot;
     private Library.Game selected;
     private Screen screen = Screen.HOME;
     private Library.Shelf shelf = Library.Shelf.ALL;
+    private Library.Shelf homeShelf = Library.Shelf.ALL;
     private GameSystem system;
     private String search = "";
     private String focusToRestore;
+    private String selectionToRestore;
     private int page, hatDirection;
     private volatile int generation;
     private boolean busy, ready;
-    private LinearLayout body, results;
+    private LinearLayout body, results, topTabs, homeRail, homeFilters;
     private ScrollView scroller;
+    private HorizontalScrollView homeScroller;
     private EditText searchField;
     private TextView activityStatus, heroLabel, heroTitle, heroHint;
-    private Button heroPlay, heroFavorite;
+    private Button heroPlay, heroFavorite, heroOptions;
     private Artwork heroArt;
+    private final List<View> homeCards = new ArrayList<>();
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -76,11 +86,13 @@ public final class MainActivity extends Activity {
         if (state != null) {
             screen = Screen.valueOf(state.getString("screen", Screen.HOME.name()));
             shelf = Library.Shelf.valueOf(state.getString("shelf", Library.Shelf.ALL.name()));
+            homeShelf = Library.Shelf.valueOf(state.getString("homeShelf", Library.Shelf.ALL.name()));
             String savedSystem = state.getString("system");
             if (savedSystem != null) system = GameSystem.valueOf(savedSystem);
             search = state.getString("search", "");
             page = state.getInt("page");
             focusToRestore = state.getString("focus");
+            selectionToRestore = state.getString("selection");
         }
         if (Build.VERSION.SDK_INT >= 33) {
             getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, this::goBack);
@@ -93,9 +105,11 @@ public final class MainActivity extends Activity {
         super.onSaveInstanceState(state);
         state.putString("screen", screen.name());
         state.putString("shelf", shelf.name());
+        state.putString("homeShelf", homeShelf.name());
         state.putString("search", search);
         state.putInt("page", page);
         state.putString("focus", focusTag());
+        if (selected != null) state.putString("selection", selected.uri.toString());
         if (system != null) state.putString("system", system.name());
     }
 
@@ -110,10 +124,11 @@ public final class MainActivity extends Activity {
     }
 
     private void render() {
-        boolean wide = getResources().getConfiguration().screenWidthDp >= 620;
+        int width = getResources().getConfiguration().screenWidthDp;
+        int gutter = pageGutter();
+        boolean wide = width >= 620;
         LinearLayout root = column();
-        root.setBackground(new GradientDrawable(GradientDrawable.Orientation.TL_BR,
-                new int[]{0xff101d30, 0xff080e1a, 0xff0d1727}));
+        root.setBackgroundColor(BACKGROUND);
         root.setOnApplyWindowInsetsListener((view, insets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 android.graphics.Insets safe = insets.getInsets(WindowInsets.Type.systemBars()
@@ -126,24 +141,27 @@ public final class MainActivity extends Activity {
             return WindowInsets.CONSUMED;
         });
 
-        LinearLayout top = wide ? row() : column();
-        top.setPadding(dp(wide ? 32 : 16), dp(8), dp(wide ? 32 : 16), dp(8));
+        LinearLayout top = row();
+        top.setPadding(dp(gutter), dp(4), dp(gutter), dp(4));
         LinearLayout brand = row();
         ImageView mark = new ImageView(this);
         mark.setImageResource(R.drawable.nomad);
         mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        brand.addView(mark, new LinearLayout.LayoutParams(dp(30), dp(30)));
-        TextView name = label("NOMAD", 17, TEXT, true);
-        name.setLetterSpacing(.20f);
-        name.setPadding(dp(9), 0, dp(16), 0);
-        brand.addView(name, dimensions(WRAP, 44));
-        top.addView(brand, wide ? new LinearLayout.LayoutParams(0, WRAP, 1) : dimensions(WRAP, WRAP));
-        LinearLayout tabs = row();
-        addTab(tabs, "Home", Screen.HOME, wide);
-        addTab(tabs, "Library", Screen.LIBRARY, wide);
-        addTab(tabs, "Settings", Screen.SETTINGS, wide);
-        top.addView(tabs, dimensions(wide ? WRAP : MATCH, 48));
+        brand.addView(mark, dimensions(27, 27));
+        if (width >= 420) {
+            TextView name = label("NOMAD", 14, TEXT, true);
+            name.setLetterSpacing(.19f);
+            name.setPadding(dp(9), 0, 0, 0);
+            brand.addView(name, dimensions(WRAP, 50));
+        }
+        top.addView(brand, new LinearLayout.LayoutParams(0, WRAP, 1));
+        topTabs = row();
+        addTab(topTabs, "Home", Screen.HOME);
+        addTab(topTabs, "Library", Screen.LIBRARY);
+        addTab(topTabs, "Settings", Screen.SETTINGS);
+        top.addView(topTabs, dimensions(WRAP, 50));
         root.addView(top, dimensions(MATCH, WRAP));
+        addDivider(root);
 
         activityStatus = label("", 13, BLUE, false);
         activityStatus.setPadding(dp(20), 0, dp(20), 0);
@@ -156,13 +174,17 @@ public final class MainActivity extends Activity {
         scroller.setVerticalScrollBarEnabled(false);
         scroller.setFocusable(false);
         body = column();
-        body.setPadding(dp(wide ? 32 : 16), dp(10), dp(wide ? 32 : 16), dp(24));
+        body.setPadding(dp(gutter), dp(wide ? 22 : 14), dp(gutter), dp(24));
         scroller.addView(body, new ScrollView.LayoutParams(MATCH, WRAP));
         root.addView(scroller, new LinearLayout.LayoutParams(MATCH, 0, 1));
         setContentView(root);
         root.requestApplyInsets();
 
         heroArt = null;
+        homeRail = null;
+        homeFilters = null;
+        homeScroller = null;
+        homeCards.clear();
         searchField = null;
         results = null;
         switch (screen) {
@@ -175,16 +197,20 @@ public final class MainActivity extends Activity {
         restoreFocus(root, focusToRestore);
     }
 
-    private void addTab(LinearLayout tabs, String text, Screen target, boolean wide) {
-        LinearLayout.LayoutParams box = wide ? dimensions(WRAP, 48) : weighted(48);
-        if (tabs.getChildCount() > 0) box.setMarginStart(dp(6));
-        tabs.addView(button(text, "tab-" + target.name(), screen == target, () -> navigate(target)), box);
+    private void addTab(LinearLayout tabs, String text, Screen target) {
+        tabs.addView(tab(text, "tab-" + target.name(), screen == target, () -> navigate(target)), dimensions(WRAP, 50));
+    }
+
+    private int pageGutter() {
+        int width = getResources().getConfiguration().screenWidthDp;
+        return width >= 1000 ? 52 : width >= 620 ? 34 : 18;
     }
 
     private void navigate(Screen target) {
         if (screen == target) return;
         hideKeyboard();
         screen = target;
+        if (target == Screen.HOME) snapshot = homeSnapshot;
         focusToRestore = "tab-" + target.name();
         if (target == Screen.LIBRARY) {
             shelf = Library.Shelf.ALL;
@@ -208,85 +234,137 @@ public final class MainActivity extends Activity {
     }
 
     private void buildHome(boolean wide) {
-        FrameLayout hero = new FrameLayout(this);
-        hero.setBackground(shape(PANEL, LINE, 22));
-        hero.setClipToOutline(true);
-        heroArt = new Artwork(this, true);
-        hero.addView(heroArt, new FrameLayout.LayoutParams(MATCH, MATCH));
-        hero.addView(new Artwork.Shade(this), new FrameLayout.LayoutParams(MATCH, MATCH));
+        boolean hasGames = !snapshot.games.isEmpty();
+        android.content.res.Configuration config = getResources().getConfiguration();
+        boolean sideBySide = wide && config.screenWidthDp >= config.screenHeightDp;
+        LinearLayout stage = sideBySide ? row() : column();
         LinearLayout caption = column();
         caption.setGravity(Gravity.CENTER_VERTICAL);
-        int padding = dp(wide ? 30 : 18);
-        caption.setPadding(padding, dp(18), padding, dp(18));
-        heroLabel = label("", 12, BLUE, true);
-        heroLabel.setLetterSpacing(.15f);
+        caption.setPadding(0, dp(sideBySide ? 4 : 20), dp(sideBySide ? 32 : 0), dp(sideBySide ? 4 : 20));
+
+        heroLabel = label("", 13, BLUE, true);
         caption.addView(heroLabel, dimensions(MATCH, WRAP));
-        heroTitle = label("", wide ? 38 : 30, TEXT, true);
-        heroTitle.setMaxLines(wide ? 2 : 3);
+        heroTitle = label("", wide ? 52 : 38, TEXT, true);
+        heroTitle.setTypeface(MEDIUM);
+        heroTitle.setLetterSpacing(-.035f);
+        heroTitle.setMaxLines(2);
         heroTitle.setEllipsize(TextUtils.TruncateAt.END);
-        heroTitle.setPadding(0, dp(6), 0, dp(4));
+        heroTitle.setPadding(0, dp(8), 0, dp(8));
         caption.addView(heroTitle, dimensions(MATCH, WRAP));
-        heroHint = label("", 14, MUTED, false);
-        heroHint.setMaxLines(3);
+        heroHint = label("", 16, MUTED, false);
         caption.addView(heroHint, dimensions(MATCH, WRAP));
+
         LinearLayout actions = row();
-        actions.setPadding(0, dp(14), 0, 0);
-        heroPlay = button("Play", "hero-play", true, this::activateHero);
+        actions.setPadding(0, dp(22), 0, 0);
+        heroPlay = button("", "hero-play", true, this::activateHero);
         actions.addView(heroPlay, dimensions(WRAP, 50));
         heroFavorite = button("☆", "hero-favorite", false, () -> {
             if (selected != null) toggleFavorite(selected);
         });
-        LinearLayout.LayoutParams star = dimensions(52, 50);
-        star.setMarginStart(dp(8));
-        actions.addView(heroFavorite, star);
+        heroOptions = button("⋯", "hero-options", false, () -> {
+            if (selected != null) gameActions(selected);
+        });
+        heroOptions.setContentDescription("Game options");
+        for (Button action : new Button[]{heroFavorite, heroOptions}) {
+            action.setTextSize(22);
+            LinearLayout.LayoutParams box = dimensions(50, 50);
+            box.setMarginStart(dp(8));
+            actions.addView(action, box);
+        }
         caption.addView(actions, dimensions(MATCH, WRAP));
-        hero.addView(caption, new FrameLayout.LayoutParams(wide ? dp(Math.min(560,
-                getResources().getConfiguration().screenWidthDp * 2 / 3)) : MATCH, MATCH));
-        body.addView(hero, dimensions(MATCH, wide ? 250 : 262));
 
-        Library.Game first = snapshot.recent.isEmpty()
-                ? (snapshot.games.isEmpty() ? null : snapshot.games.get(0)) : snapshot.recent.get(0);
+        heroArt = new Artwork(this, true);
+        if (sideBySide) {
+            stage.addView(caption, new LinearLayout.LayoutParams(0, WRAP, 1f));
+            stage.addView(heroArt, new LinearLayout.LayoutParams(0, MATCH, 1.1f));
+            int stageHeight = Math.max(300, Math.min(config.screenHeightDp / 2, 490));
+            body.addView(stage, dimensions(MATCH, stageHeight));
+        } else {
+            int artHeight = wide ? Math.min(390, (config.screenWidthDp - 2 * pageGutter()) * 9 / 16) : 205;
+            if (hasGames) stage.addView(heroArt, dimensions(MATCH, artHeight));
+            stage.addView(caption, dimensions(MATCH, WRAP));
+            if (!hasGames) stage.addView(heroArt, dimensions(MATCH, artHeight));
+            body.addView(stage, dimensions(MATCH, WRAP));
+        }
+
         Library.Game previous = selected;
         selected = null;
-        if (previous != null) {
-            for (List<Library.Game> list : java.util.Arrays.asList(snapshot.games, snapshot.recent, snapshot.favorites)) {
-                for (Library.Game game : list) {
-                    if (game.uri.equals(previous.uri) && game.root.equals(previous.root)) selected = game;
-                }
+        for (List<Library.Game> games : java.util.Arrays.asList(snapshot.games, snapshot.recent, snapshot.favorites)) {
+            for (Library.Game game : games) {
+                if (sameGame(game, previous) || game.uri.toString().equals(selectionToRestore)) selected = game;
             }
         }
-        showHero(selected == null ? first : selected);
-        if (!snapshot.recent.isEmpty()) addShelf(body, "Recently launched", snapshot.recent, "recent", Library.Shelf.RECENT);
-        if (!snapshot.favorites.isEmpty()) addShelf(body, "Favorites", snapshot.favorites, "favorites", Library.Shelf.FAVORITES);
-        if (!snapshot.games.isEmpty()) addShelf(body, "Game library", snapshot.games, "all", Library.Shelf.ALL);
+        if (selected == null && hasGames) {
+            selected = snapshot.recent.isEmpty() ? snapshot.games.get(0) : snapshot.recent.get(0);
+        }
+        if (ready && hasGames) selectionToRestore = null;
+        if (hasGames) {
+            homeRail = column();
+            LinearLayout.LayoutParams railSpace = dimensions(MATCH, WRAP);
+            railSpace.topMargin = dp(15);
+            body.addView(homeRail, railSpace);
+            renderHomeRail();
+        }
+        showHero(selected);
     }
 
     private void showHero(Library.Game game) {
         selected = game;
         if (heroArt == null) return;
         heroArt.show(game);
+        for (View card : homeCards) card.setSelected(game != null && cardTag("home", game).equals(card.getTag()));
         heroFavorite.setVisibility(game == null ? View.GONE : View.VISIBLE);
+        heroOptions.setVisibility(game == null ? View.GONE : View.VISIBLE);
         if (game == null) {
             boolean connected = snapshot.folders > 0;
-            heroLabel.setText("OFFLINE LIBRARY");
-            heroTitle.setText(connected ? "No games found" : "Connect your game library");
-            heroHint.setText(connected ? "Scan again or connect a folder with supported game files."
-                    : "Connect a folder to browse and launch the games you already have.");
+            heroLabel.setVisibility(View.GONE);
+            heroTitle.setText(connected ? "No games found" : "Add a game folder");
+            heroHint.setText(connected ? "Scan again or choose a folder with supported games."
+                    : "Choose a folder on this device to start your library.");
             heroPlay.setText(connected ? "Rescan folders" : "Connect folder");
             heroPlay.setEnabled(ready && !busy);
         } else {
-            boolean recent = !snapshot.recent.isEmpty() && snapshot.recent.get(0).uri.equals(game.uri);
-            heroLabel.setText(recent ? "CONTINUE PLAYING" : game.system.label.toUpperCase(java.util.Locale.ROOT));
+            boolean recent = !snapshot.recent.isEmpty() && sameGame(snapshot.recent.get(0), game);
+            heroLabel.setText("Continue playing");
+            heroLabel.setVisibility(recent ? View.VISIBLE : View.GONE);
             heroTitle.setText(game.title);
-            heroHint.setText(recent ? game.system.label : "");
-            heroHint.setVisibility(recent ? View.VISIBLE : View.GONE);
+            heroHint.setText(game.system.label);
             heroPlay.setText(recent ? "Continue" : "Play");
             heroPlay.setEnabled(!busy);
             heroFavorite.setText(game.favorite ? "★" : "☆");
             heroFavorite.setContentDescription(game.favorite ? "Remove from favorites" : "Add to favorites");
-            return;
         }
-        heroHint.setVisibility(View.VISIBLE);
+        wireHomeFocus();
+    }
+
+    private void wireHomeFocus() {
+        View home = topTabs.findViewWithTag("tab-HOME");
+        for (int i = 0; i < topTabs.getChildCount(); i++) {
+            topTabs.getChildAt(i).setNextFocusDownId(heroPlay.getId());
+        }
+        View activeFilter = homeFilters == null ? null : homeFilters.findViewWithTag("shelf-" + homeShelf.name());
+        int filterId = activeFilter == null ? View.NO_ID : activeFilter.getId();
+        for (Button action : new Button[]{heroPlay, heroFavorite, heroOptions}) {
+            action.setNextFocusUpId(home.getId());
+            action.setNextFocusDownId(filterId);
+        }
+        if (homeFilters == null) return;
+
+        View entry = homeCards.isEmpty() ? null : homeCards.get(0);
+        for (View card : homeCards) {
+            card.setNextFocusUpId(filterId);
+            if (card.isSelected()) entry = card;
+        }
+        for (int i = 0; i < homeFilters.getChildCount(); i++) {
+            View filter = homeFilters.getChildAt(i);
+            if (!filter.isFocusable()) continue;
+            filter.setNextFocusUpId(heroPlay.getId());
+            filter.setNextFocusDownId(entry == null ? View.NO_ID : entry.getId());
+        }
+    }
+
+    private static boolean sameGame(Library.Game a, Library.Game b) {
+        return a != null && b != null && a.uri.equals(b.uri) && a.root.equals(b.root);
     }
 
     private void activateHero() {
@@ -296,76 +374,126 @@ public final class MainActivity extends Activity {
         else pickFolder();
     }
 
-    private void addShelf(LinearLayout parent, String heading, List<Library.Game> games, String key, Library.Shelf link) {
-        LinearLayout header = row();
-        header.setPadding(0, dp(10), 0, 0);
-        TextView title = label(heading, 20, TEXT, true);
-        header.addView(title, new LinearLayout.LayoutParams(0, dp(48), 1));
-        if (link != null) {
-            Button more = button("Browse", key + "-browse", false, () -> browse(link));
-            more.setContentDescription("Browse " + heading.toLowerCase(java.util.Locale.ROOT));
-            header.addView(more, dimensions(WRAP, 48));
+    private List<Library.Game> homeGames() {
+        switch (homeShelf) {
+            case FAVORITES: return snapshot.favorites;
+            case RECENT: return snapshot.recent;
+            default: return snapshot.games;
         }
-        parent.addView(header, dimensions(MATCH, WRAP));
-        addRail(parent, games, key, 0, games.size());
     }
 
-    private void addRail(LinearLayout parent, List<Library.Game> games, String key, int begin, int end) {
+    private void renderHomeRail() {
+        homeRail.removeAllViews();
+        homeCards.clear();
+        homeScroller = null;
+        addDivider(homeRail);
+        homeFilters = row();
+        homeFilters.addView(shelfTab("All games", Library.Shelf.ALL), dimensions(WRAP, 48));
+        homeFilters.addView(shelfTab("Favorites", Library.Shelf.FAVORITES), dimensions(WRAP, 48));
+        homeFilters.addView(shelfTab("Recent", Library.Shelf.RECENT), dimensions(WRAP, 48));
+        homeFilters.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
+        Button browseButton = tab("Browse all", "browse", false, () -> browse(homeShelf));
+        boolean wide = getResources().getConfiguration().screenWidthDp >= 460;
+        if (wide) homeFilters.addView(browseButton, dimensions(WRAP, 48));
+        homeRail.addView(homeFilters, dimensions(MATCH, 48));
+
+        List<Library.Game> games = homeGames();
+        if (games.isEmpty()) {
+            String empty = homeShelf == Library.Shelf.FAVORITES ? "No favorites yet." : "No games launched yet.";
+            homeRail.addView(label(empty, 15, MUTED, false), dimensions(MATCH, 58));
+        } else {
+            addRail(homeRail, games, "home", 0, games.size(), 150);
+        }
+        if (!wide && !games.isEmpty()) homeRail.addView(browseButton, dimensions(WRAP, 48));
+    }
+
+    private Button shelfTab(String title, Library.Shelf target) {
+        String key = "shelf-" + target.name();
+        return tab(title, key, homeShelf == target, () -> {
+            if (homeShelf == target) return;
+            homeShelf = target;
+            renderHomeRail();
+            List<Library.Game> games = homeGames();
+            Library.Game preview = !games.isEmpty() && games.stream().noneMatch(game -> sameGame(game, selected))
+                    ? games.get(0) : selected;
+            showHero(preview);
+            restoreFocus(homeRail, key);
+        });
+    }
+
+    private void addRail(LinearLayout parent, List<Library.Game> games, String key, int begin, int end, int width) {
         HorizontalScrollView rail = new HorizontalScrollView(this);
+        if (key.equals("home")) homeScroller = rail;
         rail.setClipToPadding(false);
         rail.setHorizontalScrollBarEnabled(false);
         rail.setFocusable(false);
         LinearLayout cards = row();
         cards.setGravity(Gravity.TOP);
-        cards.setPadding(dp(2), dp(3), dp(2), dp(6));
+        cards.setPadding(dp(2), dp(8), dp(2), dp(7));
         for (int i = begin; i < end; i++) {
             Library.Game game = games.get(i);
-            LinearLayout.LayoutParams box = dimensions(166, WRAP);
-            box.setMarginEnd(dp(10));
-            cards.addView(card(game, key), box);
+            LinearLayout.LayoutParams box = dimensions(width, WRAP);
+            if (i + 1 < end) box.setMarginEnd(dp(12));
+            View card = card(game, key, width);
+            if (key.equals("home")) homeCards.add(card);
+            cards.addView(card, box);
         }
         rail.addView(cards, new HorizontalScrollView.LayoutParams(WRAP, WRAP));
         parent.addView(rail, dimensions(MATCH, WRAP));
     }
 
-    private View card(Library.Game game, String key) {
+    private static String cardTag(String key, Library.Game game) {
+        return key + "-" + game.uri;
+    }
+
+    private View card(Library.Game game, String key, int width) {
         LinearLayout card = column();
-        card.setTag(key + "-" + game.uri);
-        card.setBackground(shape(PANEL, LINE, 13));
-        card.setForeground(focusRing(13));
-        card.setClipToOutline(true);
+        card.setId(View.generateViewId());
+        card.setTag(cardTag(key, game));
         card.setFocusable(true);
         card.setClickable(true);
         card.setContentDescription(game.title + ", " + game.system.label + (game.favorite ? ", favorite" : ""));
         Artwork artwork = new Artwork(this, false);
+        artwork.setBackground(shape(PANEL, Color.TRANSPARENT, 5));
+        artwork.setClipToOutline(true);
+        artwork.setForeground(tileRing());
+        artwork.setDuplicateParentStateEnabled(true);
         artwork.show(game);
-        card.addView(artwork, dimensions(MATCH, 96));
-        TextView title = label(game.title, 14, TEXT, true);
+        card.addView(artwork, dimensions(MATCH, width * 2 / 3));
+        TextView title = label(game.title + (game.favorite ? "  ★" : ""), 14, TEXT, true);
         title.setSingleLine(true);
         title.setEllipsize(TextUtils.TruncateAt.END);
-        title.setPadding(dp(10), 0, dp(10), 0);
         title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
         card.addView(title, dimensions(MATCH, 30));
-        TextView type = label(game.system.label + (game.favorite ? "  ★" : ""), 11, MUTED, false);
-        type.setSingleLine(true);
-        type.setEllipsize(TextUtils.TruncateAt.END);
-        type.setPadding(dp(10), 0, dp(10), dp(5));
-        type.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-        card.addView(type, dimensions(MATCH, 21));
+        if (!key.equals("home")) {
+            TextView type = label(game.system.label, 12, MUTED, false);
+            type.setSingleLine(true);
+            type.setEllipsize(TextUtils.TruncateAt.END);
+            type.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            card.addView(type, dimensions(MATCH, 20));
+        }
         card.setOnFocusChangeListener((view, focused) -> {
             if (focused && screen == Screen.HOME) showHero(game);
         });
         card.setOnClickListener(view -> {
-            if (screen == Screen.HOME) showHero(game);
+            if (screen != Screen.HOME) {
+                gameActions(game);
+            } else if (sameGame(game, selected)) {
+                play(game);
+            } else {
+                showHero(game);
+            }
+        });
+        card.setOnLongClickListener(view -> {
             gameActions(game);
+            return true;
         });
         return card;
     }
 
     private void buildLibrary(boolean wide) {
-        body.addView(label(shelf == Library.Shelf.FAVORITES ? "Favorites"
-                : shelf == Library.Shelf.RECENT ? "Recently launched" : "Game library", 30, TEXT, true),
-                dimensions(MATCH, 56));
+        pageTitle(shelf == Library.Shelf.FAVORITES ? "Favorites"
+                : shelf == Library.Shelf.RECENT ? "Recently launched" : "Library");
         LinearLayout controls = wide ? row() : column();
         searchField = new EditText(this);
         searchField.setTag("search");
@@ -376,8 +504,8 @@ public final class MainActivity extends Activity {
         searchField.setImeOptions(EditorInfo.IME_ACTION_SEARCH);
         searchField.setHint("Search games");
         searchField.setText(search);
-        searchField.setBackground(shape(PANEL, LINE, 11));
-        searchField.setForeground(focusRing(11));
+        searchField.setBackground(shape(PANEL, LINE, 6));
+        searchField.setForeground(focusRing(6));
         searchField.setPadding(dp(14), 0, dp(14), 0);
         searchField.setOnEditorActionListener((view, action, event) -> {
             if (action != EditorInfo.IME_ACTION_SEARCH) return false;
@@ -420,10 +548,11 @@ public final class MainActivity extends Activity {
                     dimensions(WRAP, 48));
         } else {
             int count = Math.min(Library.PAGE, snapshot.games.size());
-            int width = getResources().getConfiguration().screenWidthDp;
-            int perRail = Math.max(2, Math.min(8, (width - 48) / 176));
+            int available = getResources().getConfiguration().screenWidthDp - (pageGutter() * 2 + 4);
+            int perRail = Math.max(1, Math.min(8, (available + 12) / 148));
+            int tileWidth = (available - (perRail - 1) * 12) / perRail;
             for (int begin = 0; begin < count; begin += perRail) {
-                addRail(results, snapshot.games, "results", begin, Math.min(count, begin + perRail));
+                addRail(results, snapshot.games, "results", begin, Math.min(count, begin + perRail), tileWidth);
             }
         }
         if (page > 0 || snapshot.games.size() > Library.PAGE) {
@@ -459,19 +588,19 @@ public final class MainActivity extends Activity {
     }
 
     private void buildSettings() {
-        body.addView(label("Settings", 30, TEXT, true), dimensions(MATCH, 58));
-        section("Game folders");
-        setting("Connect folder", "Grant read access to a game folder.", "connect", this::pickFolder);
-        setting("Manage folders", "Rescan or disconnect individual folders.", "folders", this::manageFolders);
-        setting("Rescan library", "Update the index from connected folders.", "scan", this::scanAll);
-        section("Playback");
-        setting("Emulator preferences", "Choose an Android app for each system.", "emulators", this::chooseEmulatorSystem);
-        section("Device");
-        setting("Clear artwork cache", "Reload local artwork the next time it is shown.", "cache", () -> {
+        pageTitle("Settings");
+        section("Library");
+        setting("Connect folder", "connect", this::pickFolder);
+        setting("Manage folders", "folders", this::manageFolders);
+        setting("Rescan library", "scan", this::scanAll);
+        setting("Clear artwork cache", "cache", () -> {
             Artwork.clear();
             message("Artwork cache cleared.");
         });
-        setting("Default Home app", "Open Android settings to choose your Home launcher.", "default-home", () -> {
+        section("Playback");
+        setting("Emulator preferences", "emulators", this::chooseEmulatorSystem);
+        section("Device");
+        setting("Default Home app", "default-home", () -> {
             try {
                 startActivity(new Intent(Settings.ACTION_HOME_SETTINGS));
             } catch (ActivityNotFoundException error) {
@@ -480,17 +609,36 @@ public final class MainActivity extends Activity {
         });
     }
 
-    private void section(String title) {
-        body.addView(label(title, 18, BLUE, true), dimensions(MATCH, 45));
+    private void pageTitle(String text) {
+        TextView title = label(text, 36, TEXT, true);
+        title.setTypeface(MEDIUM);
+        title.setLetterSpacing(-.025f);
+        body.addView(title, dimensions(MATCH, 72));
     }
 
-    private void setting(String title, String hint, String key, Runnable action) {
-        Button control = button(title, key, false, action);
-        control.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
-        body.addView(control, dimensions(MATCH, 50));
-        TextView note = label(hint, 13, MUTED, false);
-        note.setPadding(dp(16), 0, dp(12), dp(8));
-        body.addView(note, dimensions(MATCH, WRAP));
+    private void section(String title) {
+        TextView heading = label(title, 14, MUTED, true);
+        heading.setPadding(0, dp(8), 0, 0);
+        body.addView(heading, dimensions(MATCH, 43));
+    }
+
+    private void setting(String title, String key, Runnable action) {
+        LinearLayout item = row();
+        item.setTag(key);
+        item.setFocusable(true);
+        item.setClickable(true);
+        item.setForeground(focusRing(6));
+        item.setContentDescription(title);
+        item.setOnClickListener(view -> action.run());
+        item.setPadding(dp(12), 0, dp(12), 0);
+        TextView text = label(title, 17, TEXT, false);
+        text.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        item.addView(text, new LinearLayout.LayoutParams(0, MATCH, 1));
+        TextView chevron = label("›", 24, MUTED, false);
+        chevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        item.addView(chevron, dimensions(20, MATCH));
+        addDivider(body);
+        body.addView(item, dimensions(MATCH, 53));
     }
 
     private void chooseEmulatorSystem() {
@@ -722,12 +870,16 @@ public final class MainActivity extends Activity {
                     }
                     status(busy ? "Working…" : null);
                     if (target == Screen.HOME) {
+                        homeSnapshot = state;
                         int scroll = scroller.getScrollY();
+                        int railScroll = homeScroller == null ? 0 : homeScroller.getScrollX();
                         String focus = focusTag();
                         if (focus != null) focusToRestore = focus;
                         render();
                         ScrollView view = scroller;
                         view.post(() -> view.scrollTo(0, scroll));
+                        HorizontalScrollView rail = homeScroller;
+                        if (rail != null) rail.post(() -> rail.scrollTo(railScroll, 0));
                     } else if (target == Screen.LIBRARY) {
                         renderResults();
                     }
@@ -872,19 +1024,46 @@ public final class MainActivity extends Activity {
 
     private Button button(String text, String key, boolean primary, Runnable action) {
         Button button = new Button(this);
+        button.setId(View.generateViewId());
         button.setTag(key);
         button.setText(text);
         button.setAllCaps(false);
-        button.setTextSize(14);
-        button.setTextColor(primary ? 0xff071522 : TEXT);
+        button.setTextSize(15);
+        button.setTypeface(MEDIUM);
+        int color = primary ? 0xff102020 : TEXT;
+        button.setTextColor(new ColorStateList(new int[][]{ {-android.R.attr.state_enabled}, new int[0] },
+                new int[]{primary ? 0xff42595a : MUTED, color}));
         button.setStateListAnimator(null);
         button.setMinimumWidth(dp(48));
         button.setMinHeight(dp(48));
-        button.setPadding(dp(14), 0, dp(14), 0);
-        button.setBackground(shape(primary ? BLUE : PANEL, primary ? BLUE : LINE, 11));
-        button.setForeground(focusRing(11));
+        button.setPadding(dp(primary ? 20 : 14), 0, dp(primary ? 20 : 14), 0);
+        button.setBackground(shape(primary ? BLUE : PANEL, primary ? BLUE : LINE, 6));
+        button.setForeground(focusRing(6));
         button.setOnClickListener(view -> action.run());
         return button;
+    }
+
+    private Button tab(String text, String key, boolean active, Runnable action) {
+        Button tab = button(text, key, false, action);
+        tab.setTextColor(active ? TEXT : MUTED);
+        tab.setSelected(active);
+        if (active) {
+            LayerDrawable underline = new LayerDrawable(new Drawable[]{
+                    shape(Color.TRANSPARENT, Color.TRANSPARENT, 0), shape(BLUE, BLUE, 1)
+            });
+            underline.setLayerSize(1, dp(22), dp(2));
+            underline.setLayerGravity(1, Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+            tab.setBackground(underline);
+        } else {
+            tab.setBackgroundColor(Color.TRANSPARENT);
+        }
+        return tab;
+    }
+
+    private void addDivider(LinearLayout parent) {
+        View line = new View(this);
+        line.setBackgroundColor(LINE);
+        parent.addView(line, dimensions(MATCH, 1));
     }
 
     private GradientDrawable shape(int fill, int border, int radius) {
@@ -897,11 +1076,22 @@ public final class MainActivity extends Activity {
 
     private StateListDrawable focusRing(int radius) {
         StateListDrawable states = new StateListDrawable();
-        GradientDrawable ring = shape(Color.TRANSPARENT, Color.WHITE, radius);
-        ring.setStroke(dp(3), Color.WHITE);
+        GradientDrawable ring = shape(0x101cbabd, TEXT, radius);
+        ring.setStroke(dp(2), TEXT);
         states.addState(new int[]{android.R.attr.state_focused}, ring);
         states.addState(new int[]{android.R.attr.state_pressed}, shape(0x334c9df3, BLUE, radius));
         states.addState(new int[0], shape(Color.TRANSPARENT, Color.TRANSPARENT, radius));
         return states;
+    }
+
+    private StateListDrawable tileRing() {
+        StateListDrawable tile = new StateListDrawable();
+        GradientDrawable ring = shape(Color.TRANSPARENT, TEXT, 5);
+        ring.setStroke(dp(2), TEXT);
+        tile.addState(new int[]{android.R.attr.state_focused}, ring);
+        tile.addState(new int[]{android.R.attr.state_pressed}, shape(0x331cbabd, BLUE, 5));
+        tile.addState(new int[]{android.R.attr.state_selected}, shape(Color.TRANSPARENT, BLUE, 5));
+        tile.addState(new int[0], shape(Color.TRANSPARENT, Color.TRANSPARENT, 5));
+        return tile;
     }
 }

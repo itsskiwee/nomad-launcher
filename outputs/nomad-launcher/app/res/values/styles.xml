@@ -1,12 +1,12 @@
 <resources>
     <style name="NomadTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:fontFamily">sans</item>
-        <item name="android:windowBackground">#080E1A</item>
-        <item name="android:colorAccent">#96C8FF</item>
-        <item name="android:statusBarColor">#080E1A</item>
-        <item name="android:navigationBarColor">#080E1A</item>
+        <item name="android:windowBackground">#0C1118</item>
+        <item name="android:colorAccent">#A0E4E3</item>
+        <item name="android:statusBarColor">#0C1118</item>
+        <item name="android:navigationBarColor">#0C1118</item>
         <item name="android:windowLightStatusBar">false</item>
         <item name="android:windowLightNavigationBar">false</item>
-        <item name="android:colorBackground">#101B2D</item>
+        <item name="android:colorBackground">#151E27</item>
     </style>
 </resources>

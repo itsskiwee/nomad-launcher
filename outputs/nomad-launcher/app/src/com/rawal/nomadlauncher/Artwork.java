@@ -9,8 +9,8 @@ import android.graphics.ImageDecoder;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
 import android.graphics.Path;
-import android.graphics.RadialGradient;
 import android.graphics.Rect;
+import android.graphics.RectF;
 import android.graphics.Shader;
 import android.net.Uri;
 import android.util.LruCache;
@@ -37,11 +37,13 @@ final class Artwork extends View {
     private final Rect source = new Rect();
     private final Rect destination = new Rect();
     private final Rect visible = new Rect();
-    private final Path diamond = new Path();
+    private final RectF photoBounds = new RectF();
+    private final Path outline = new Path();
     private final ViewTreeObserver.OnScrollChangedListener scrollListener = this::refreshVisibleArtwork;
     private Uri uri;
     private String cacheKey;
-    private int accent = 0xff4e97e5;
+    private GameSystem system;
+    private int accent = 0xffa0e4e3;
     private Shader background;
     private boolean loading, unreadable;
     private int requestEpoch, requestId;
@@ -54,11 +56,12 @@ final class Artwork extends View {
 
     void show(Library.Game game) {
         Uri next = game == null ? null : game.art;
-        int nextColor = game == null ? 0xff4e97e5 : game.system.color;
-        if (java.util.Objects.equals(uri, next) && accent == nextColor) return;
+        GameSystem nextSystem = game == null ? null : game.system;
+        if (java.util.Objects.equals(uri, next) && system == nextSystem) return;
         uri = next;
         cacheKey = uri == null ? null : uri + "#" + thumbnailSize();
-        accent = nextColor;
+        system = nextSystem;
+        accent = system == null ? 0xffa0e4e3 : system.color;
         requestId++;
         loading = false;
         unreadable = false;
@@ -100,13 +103,14 @@ final class Artwork extends View {
 
     private void makeBackground(int width, int height) {
         if (width <= 0 || height <= 0) return;
-        background = new RadialGradient(width * (featured ? .78f : .55f), height * .46f,
-                Math.max(width, height) * (featured ? .65f : .80f),
-                new int[]{muted(accent), 0xff10233d, 0xff0b1527}, null, Shader.TileMode.CLAMP);
+        int tone = Color.rgb(12 + Color.red(accent) / 14,
+                16 + Color.green(accent) / 11, 24 + Color.blue(accent) / 10);
+        background = new LinearGradient(0, 0, width, height,
+                tone, 0xff0e151e, Shader.TileMode.CLAMP);
     }
 
-    private static int muted(int color) {
-        return Color.rgb(Color.red(color) * 2 / 5, Color.green(color) * 2 / 5, Color.blue(color) / 2);
+    private int tint(int alpha) {
+        return (accent & 0xffffff) | alpha << 24;
     }
 
     @Override protected void onDraw(Canvas canvas) {
@@ -174,6 +178,18 @@ final class Artwork extends View {
     }
 
     private void drawPhoto(Canvas canvas, Bitmap bitmap, int width, int height) {
+        paint.setAlpha(255);
+        if (featured) {
+            canvas.drawColor(0xff121c25);
+            float scale = Math.min((float) width / bitmap.getWidth(), (float) height / bitmap.getHeight());
+            float scaledWidth = bitmap.getWidth() * scale;
+            float scaledHeight = bitmap.getHeight() * scale;
+            float x = (width - scaledWidth) / 2;
+            float y = (height - scaledHeight) / 2;
+            photoBounds.set(x, y, x + scaledWidth, y + scaledHeight);
+            canvas.drawBitmap(bitmap, null, photoBounds, paint);
+            return;
+        }
         float ratio = Math.max((float) width / bitmap.getWidth(), (float) height / bitmap.getHeight());
         int cropWidth = Math.round(width / ratio);
         int cropHeight = Math.round(height / ratio);
@@ -181,7 +197,6 @@ final class Artwork extends View {
         int y = (bitmap.getHeight() - cropHeight) / 2;
         source.set(x, y, x + cropWidth, y + cropHeight);
         destination.set(0, 0, width, height);
-        paint.setAlpha(255);
         canvas.drawBitmap(bitmap, source, destination, paint);
     }
 
@@ -190,43 +205,127 @@ final class Artwork extends View {
         paint.setShader(background);
         canvas.drawRect(0, 0, width, height, paint);
         paint.setShader(null);
-        float cx = width * (featured ? .78f : .51f);
-        float cy = height * .50f;
-        float unit = Math.min(width, height);
-        paint.setStyle(Paint.Style.STROKE);
-        paint.setStrokeWidth(Math.max(1f, unit * .004f));
-        for (int i = 0; i < 6; i++) {
-            float radius = unit * (.15f + .095f * i);
-            paint.setColor((accent & 0xffffff) | ((86 - 12 * i) << 24));
-            diamond.rewind();
-            diamond.moveTo(cx, cy - radius);
-            diamond.lineTo(cx + radius * 1.27f, cy);
-            diamond.lineTo(cx, cy + radius);
-            diamond.lineTo(cx - radius * 1.27f, cy);
-            diamond.close();
-            canvas.drawPath(diamond, paint);
+        float scale = Math.min(width / 320f, height / 212f);
+        canvas.save();
+        canvas.translate((width - 320f * scale) / 2, (height - 212f * scale) / 2);
+        canvas.scale(scale, scale);
+        if (featured) drawGrid(canvas, width / scale, height / scale);
+        if (system == null || system == GameSystem.PSP || system == GameSystem.DS
+                || system == GameSystem.GB || system == GameSystem.GBC || system == GameSystem.GBA
+                || system == GameSystem.GG) {
+            drawHandheld(canvas);
+        } else if (system == GameSystem.PS1 || system == GameSystem.DC) {
+            drawDisc(canvas);
+        } else {
+            drawCartridge(canvas);
         }
-        paint.setStyle(Paint.Style.FILL);
-        paint.setColor((accent & 0xffffff) | 0x93000000);
-        canvas.drawCircle(cx, cy, unit * .022f, paint);
+        canvas.restore();
     }
 
-    static final class Shade extends View {
-        private final Paint paint = new Paint();
-
-        Shade(Context context) {
-            super(context);
-            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+    private void drawGrid(Canvas canvas, float width, float height) {
+        float horizontal = (width - 320f) / 2;
+        float vertical = (height - 212f) / 2;
+        paint.setColor(tint(20));
+        for (float y = 10; y < 212 + vertical; y += 16) {
+            canvas.drawLine(-horizontal, y, 320 + horizontal, y, paint);
         }
-
-        @Override protected void onSizeChanged(int width, int height, int oldWidth, int oldHeight) {
-            int[] colors = {0xff0d192d, 0xe30d192d, 0x550d192d, 0x050d192d};
-            if (width > 0) paint.setShader(new LinearGradient(0, 0, width, 0, colors,
-                    new float[]{0f, .40f, .76f, 1f}, Shader.TileMode.CLAMP));
+        for (float y = -6; y > -vertical; y -= 16) {
+            canvas.drawLine(-horizontal, y, 320 + horizontal, y, paint);
         }
-
-        @Override protected void onDraw(Canvas canvas) {
-            canvas.drawRect(0, 0, getWidth(), getHeight(), paint);
+        for (float x = 8; x < 320 + horizontal; x += 16) {
+            canvas.drawLine(x, -vertical, x, 212 + vertical, paint);
         }
+        for (float x = -8; x > -horizontal; x -= 16) {
+            canvas.drawLine(x, -vertical, x, 212 + vertical, paint);
+        }
+    }
+
+    private void drawHandheld(Canvas canvas) {
+        canvas.save();
+        canvas.rotate(-12, 160, 106);
+        paint.setColor(0xff0a0f15);
+        canvas.drawRoundRect(42, 63, 282, 163, 19, 19, paint);
+        face(canvas, 38, 51, 278, 150, 18);
+        paint.setColor(0xff0c151e);
+        canvas.drawRoundRect(89, 63, 226, 137, 7, 7, paint);
+        paint.setColor(tint(135));
+        canvas.drawRoundRect(97, 70, 218, 130, 3, 3, paint);
+        paint.setColor(0xff263e4b);
+        canvas.drawRect(102, 75, 213, 125, paint);
+        paint.setColor(tint(110));
+        if (system == GameSystem.DS) {
+            canvas.drawRect(126, 80, 189, 97, paint);
+            canvas.drawRect(126, 103, 189, 120, paint);
+        } else {
+            outline.rewind();
+            outline.moveTo(102, 125);
+            outline.lineTo(144, 89);
+            outline.lineTo(165, 108);
+            outline.lineTo(185, 95);
+            outline.lineTo(213, 120);
+            outline.lineTo(213, 125);
+            outline.close();
+            canvas.drawPath(outline, paint);
+            canvas.drawCircle(192, 85, 5, paint);
+        }
+        paint.setColor(0xffb5c4c7);
+        canvas.drawRoundRect(59, 88, 67, 113, 2, 2, paint);
+        canvas.drawRoundRect(51, 96, 75, 104, 2, 2, paint);
+        paint.setColor(tint(220));
+        canvas.drawCircle(251, 93, 6, paint);
+        canvas.drawCircle(241, 106, 6, paint);
+        paint.setColor(tint(110));
+        canvas.drawRoundRect(126, 144, 190, 147, 1, 1, paint);
+        canvas.restore();
+    }
+
+    private void drawDisc(Canvas canvas) {
+        canvas.save();
+        canvas.rotate(-18, 160, 106);
+        paint.setColor(0xff0b141b);
+        canvas.drawCircle(164, 113, 63, paint);
+        paint.setColor(tint(105));
+        canvas.drawCircle(160, 105, 62, paint);
+        paint.setColor(0xff24313b);
+        canvas.drawCircle(160, 105, 59, paint);
+        paint.setColor(tint(120));
+        canvas.drawArc(104, 49, 216, 161, 203, 91, true, paint);
+        paint.setColor(tint(200));
+        canvas.drawArc(106, 51, 214, 159, 219, 12, true, paint);
+        paint.setColor(0xff17232e);
+        canvas.drawCircle(160, 105, 44, paint);
+        paint.setColor(tint(132));
+        canvas.drawCircle(160, 105, 20, paint);
+        paint.setColor(0xff0c141c);
+        canvas.drawCircle(160, 105, 10, paint);
+        canvas.restore();
+    }
+
+    private void drawCartridge(Canvas canvas) {
+        canvas.save();
+        canvas.rotate(-12, 160, 106);
+        paint.setColor(0xff091018);
+        canvas.drawRoundRect(99, 51, 229, 172, 11, 11, paint);
+        face(canvas, 95, 41, 225, 161, 11);
+        paint.setColor(0xff0e1921);
+        canvas.drawRoundRect(109, 58, 211, 115, 3, 3, paint);
+        paint.setColor(tint(185));
+        canvas.drawRoundRect(113, 62, 207, 111, 2, 2, paint);
+        paint.setColor(tint(90));
+        canvas.drawRect(113, 91, 207, 111, paint);
+        paint.setColor(0xff212d36);
+        canvas.drawRoundRect(113, 135, 207, 157, 3, 3, paint);
+        paint.setColor(tint(140));
+        for (int x = 120; x < 200; x += 8) {
+            canvas.drawRect(x, 145, x + 4, 153, paint);
+        }
+        canvas.restore();
+    }
+
+    private void face(Canvas canvas, float left, float top, float right, float bottom, float radius) {
+        paint.setColor(tint(145));
+        canvas.drawRoundRect(left, top, right, bottom, radius, radius, paint);
+        paint.setColor(0xff273640);
+        canvas.drawRoundRect(left + 2, top + 2, right - 2, bottom - 2, radius - 2, radius - 2, paint);
     }
 }

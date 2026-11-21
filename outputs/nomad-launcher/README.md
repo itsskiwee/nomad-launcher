@@ -25,7 +25,7 @@ The Windows build uses the JDK and SDK directly. It signs the sideload APK with 
 ## Connect and play
 
 1. Choose **Connect folder** and grant read access in Android’s folder picker. Connect additional folders from **Settings**. Nomad stores a local index and leaves the original files in place.
-2. Browse the dashboard shelves or use **Library** to search titles and filter by system. Choose a game to play it, add it to Favorites, or choose its emulator. **Continue** opens the most recently handed-off game using its configured emulator.
+2. On **Home**, switch between **All games**, **Favorites**, and **Recent**. Tap a cover or move focus onto it to preview the game. Use **Play** or confirm on the focused cover to launch. The star toggles favorites and the options menu lets you choose an emulator. Use **Library** to search titles and filter by system.
 3. Use **Settings → Manage folders** to rescan or disconnect a folder. **Clear artwork cache** discards the in-memory thumbnails. Add a PNG, JPEG, or WebP with the same basename next to a game or directly inside a neighboring `covers` or `artwork` directory. Images are loaded as needed with size limits. Games without usable artwork show an original placeholder.
 
 The scanner recognizes NES, Super Nintendo, Game Boy and Game Boy Color, Game Boy Advance, Mega Drive / Genesis, Master System, Game Gear, Nintendo 64, and Nintendo DS by file extension. PSP `.cso` and Dreamcast `.cdi` are also recognized. Put ambiguous disc files in an identifying folder such as `PS1`, `PSP`, or `Dreamcast`. For example, use `PS1/Game.chd` or `PSP/Game.iso`. Dreamcast is experimental. ZIP archives, CUE/BIN disc sets, and multi-disc playlists are outside this milestone.
